@@ -2,6 +2,7 @@
 
 #Global shellcheck disabled warnings
 #shellcheck disable=SC2034
+#필요한 의존성 설치 파일
 
 plugin_name="Missing dependencies auto-installation"
 plugin_description="A plugin to autoinstall missing dependencies on some Operating Systems (Kali, Parrot, BlackArch)"
