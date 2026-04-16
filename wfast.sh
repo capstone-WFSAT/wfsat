@@ -7334,43 +7334,43 @@ function evil_twin_attacks_menu() {
 	print_hint
 
 
-	et_option = "2"
+	et_option="2"
 	monitor_option "${interface}"
 
-	et_option = "4"
+	et_option="4"
 	explore_for_targets_option
 
-	et_option = "5"
+	et_option="6"
 	if contains_element "${et_option}" "${forbidden_options[@]}"; then
-		forbidden_menu_option
-	else
-		current_iface_on_messages="${interface}"
-		if check_interface_wifi "${interface}"; then
-			if [ "${adapter_vif_support}" -eq 0 ]; then
-				ask_yesno 696 "no"
-				if [ "${yesno}" = "y" ]; then
-					et_attack_adapter_prerequisites_ok=1
-				fi
+				forbidden_menu_option
 			else
-				et_attack_adapter_prerequisites_ok=1
-			fi
+				current_iface_on_messages="${interface}"
+				if check_interface_wifi "${interface}"; then
+					if [ "${adapter_vif_support}" -eq 0 ]; then
+						ask_yesno 696 "no"
+						if [ "${yesno}" = "y" ]; then
+							et_attack_adapter_prerequisites_ok=1
+						fi
+					else
+						et_attack_adapter_prerequisites_ok=1
+					fi
 
-			if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
+					if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
 
-				declare -gA ports_needed
-				ports_needed["tcp"]=""
-				ports_needed["udp"]="${dhcp_port}"
-				if check_busy_ports; then
-					et_mode="et_onlyap"
-					et_dos_menu
+						declare -gA ports_needed
+						ports_needed["tcp"]=""
+						ports_needed["udp"]="${dhcp_port}"
+						if check_busy_ports; then
+							et_mode="et_sniffing"
+							et_dos_menu
+						fi
+					fi
+				else
+					echo
+					language_strings "${language}" 281 "red"
+					language_strings "${language}" 115 "read"
 				fi
 			fi
-		else
-			echo
-			language_strings "${language}" 281 "red"
-			language_strings "${language}" 115 "read"
-		fi
-	fi
 	invalid_menu_option
 
 	evil_twin_attacks_menu
@@ -15866,90 +15866,32 @@ function et_dos_menu() {
 	language_strings "${language}" 141 mdk_attack_dependencies[@]
 	print_hint
 
-	read -rp "> " et_dos_option
-	case ${et_dos_option} in
-		0)
-			if [ "${1}" != "enterprise" ]; then
-				return_to_et_main_menu_from_beef=1
-			fi
+
+	#Auth Dos attack
+	et_dos_option="3"
+
+	if contains_element "${et_dos_option}" "${forbidden_options[@]}"; then
+		forbidden_menu_option
+	else
+		et_dos_attack="Auth DoS"
+
+		echo
+		language_strings "${language}" 509 "yellow"
+
+		if ! dos_pursuit_mode_et_handler; then
 			return
-		;;
-		1)
-			if contains_element "${et_dos_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
+		fi
+
+		if [[ "${et_mode}" = "et_captive_portal" ]] || [[ -n "${enterprise_mode}" ]]; then
+			et_prerequisites
+		else
+			if detect_internet_interface; then
+				et_prerequisites
 			else
-				et_dos_attack="${mdk_command}"
-
-				echo
-				language_strings "${language}" 509 "yellow"
-
-				if ! dos_pursuit_mode_et_handler; then
-					return
-				fi
-
-				if [[ "${et_mode}" = "et_captive_portal" ]] || [[ -n "${enterprise_mode}" ]]; then
-					et_prerequisites
-				else
-					if detect_internet_interface; then
-						et_prerequisites
-					else
-						return
-					fi
-				fi
+				return
 			fi
-		;;
-		2)
-			if contains_element "${et_dos_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
-			else
-				et_dos_attack="Aireplay"
-
-				echo
-				language_strings "${language}" 509 "yellow"
-
-				if ! dos_pursuit_mode_et_handler; then
-					return
-				fi
-
-				if [[ "${et_mode}" = "et_captive_portal" ]] || [[ -n "${enterprise_mode}" ]]; then
-					et_prerequisites
-				else
-					if detect_internet_interface; then
-						et_prerequisites
-					else
-						return
-					fi
-				fi
-			fi
-		;;
-		3)
-			if contains_element "${et_dos_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
-			else
-				et_dos_attack="Auth DoS"
-
-				echo
-				language_strings "${language}" 509 "yellow"
-
-				if ! dos_pursuit_mode_et_handler; then
-					return
-				fi
-
-				if [[ "${et_mode}" = "et_captive_portal" ]] || [[ -n "${enterprise_mode}" ]]; then
-					et_prerequisites
-				else
-					if detect_internet_interface; then
-						et_prerequisites
-					else
-						return
-					fi
-				fi
-			fi
-		;;
-		*)
-			invalid_menu_option
-		;;
-	esac
+		fi
+	fi
 
 	if [ "${1}" = "enterprise" ]; then
 		et_dos_menu "${1}"
