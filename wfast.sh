@@ -7174,88 +7174,6 @@ function is_last_airgeddon_instance() {
 	return 0
 }
 
-#airgeddon main menu
-function main_menu() {
-
-	debug_print
-
-	clear
-	language_strings "${language}" 101 "title"
-	current_menu="main_menu"
-	initialize_menu_and_print_selections
-	echo
-	language_strings "${language}" 47 "green"
-	print_simple_separator
-	language_strings "${language}" 61
-	language_strings "${language}" 48
-	language_strings "${language}" 55
-	language_strings "${language}" 56
-	print_simple_separator
-	language_strings "${language}" 118
-	language_strings "${language}" 119
-	language_strings "${language}" 169
-	language_strings "${language}" 252
-	language_strings "${language}" 333
-	language_strings "${language}" 426
-	language_strings "${language}" 57
-	language_strings "${language}" 754
-	print_simple_separator
-	language_strings "${language}" 60
-	language_strings "${language}" 444
-	print_hint
-
-	read -rp "> " main_option
-	case ${main_option} in
-		0)
-			exit_script_option
-		;;
-		1)
-			select_interface
-		;;
-		2)
-			monitor_option "${interface}"
-		;;
-		3)
-			managed_option "${interface}"
-		;;
-		4)
-			dos_attacks_menu
-		;;
-		5)
-			handshake_pmkid_decloaking_tools_menu
-		;;
-		6)
-			decrypt_menu
-		;;
-		7)
-			evil_twin_attacks_menu
-		;;
-		8)
-			wps_attacks_menu
-		;;
-		9)
-			wep_attacks_menu
-		;;
-		10)
-			enterprise_attacks_menu
-		;;
-		11)
-			hookable_wpa3_attacks_menu
-		;;
-		12)
-			credits_option
-		;;
-		13)
-			option_menu
-		;;
-		*)
-			invalid_menu_option
-		;;
-	esac
-
-	main_menu
-}
-
 #Enterprise attacks menu
 function enterprise_attacks_menu() {
 
@@ -7415,171 +7333,45 @@ function evil_twin_attacks_menu() {
 	language_strings "${language}" 263 et_captive_portal_dependencies[@]
 	print_hint
 
-	read -rp "> " et_option
-	case ${et_option} in
-		0)
-			return
-		;;
-		1)
-			select_interface
-		;;
-		2)
-			monitor_option "${interface}"
-		;;
-		3)
-			managed_option "${interface}"
-		;;
-		4)
-			explore_for_targets_option
-		;;
-		5)
-			if contains_element "${et_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
+
+	et_option = "2"
+	monitor_option "${interface}"
+
+	et_option = "4"
+	explore_for_targets_option
+
+	et_option = "5"
+	if contains_element "${et_option}" "${forbidden_options[@]}"; then
+		forbidden_menu_option
+	else
+		current_iface_on_messages="${interface}"
+		if check_interface_wifi "${interface}"; then
+			if [ "${adapter_vif_support}" -eq 0 ]; then
+				ask_yesno 696 "no"
+				if [ "${yesno}" = "y" ]; then
+					et_attack_adapter_prerequisites_ok=1
+				fi
 			else
-				current_iface_on_messages="${interface}"
-				if check_interface_wifi "${interface}"; then
-					if [ "${adapter_vif_support}" -eq 0 ]; then
-						ask_yesno 696 "no"
-						if [ "${yesno}" = "y" ]; then
-							et_attack_adapter_prerequisites_ok=1
-						fi
-					else
-						et_attack_adapter_prerequisites_ok=1
-					fi
+				et_attack_adapter_prerequisites_ok=1
+			fi
 
-					if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
+			if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
 
-						declare -gA ports_needed
-						ports_needed["tcp"]=""
-						ports_needed["udp"]="${dhcp_port}"
-						if check_busy_ports; then
-							et_mode="et_onlyap"
-							et_dos_menu
-						fi
-					fi
-				else
-					echo
-					language_strings "${language}" 281 "red"
-					language_strings "${language}" 115 "read"
+				declare -gA ports_needed
+				ports_needed["tcp"]=""
+				ports_needed["udp"]="${dhcp_port}"
+				if check_busy_ports; then
+					et_mode="et_onlyap"
+					et_dos_menu
 				fi
 			fi
-		;;
-		6)
-			if contains_element "${et_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
-			else
-				current_iface_on_messages="${interface}"
-				if check_interface_wifi "${interface}"; then
-					if [ "${adapter_vif_support}" -eq 0 ]; then
-						ask_yesno 696 "no"
-						if [ "${yesno}" = "y" ]; then
-							et_attack_adapter_prerequisites_ok=1
-						fi
-					else
-						et_attack_adapter_prerequisites_ok=1
-					fi
-
-					if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
-
-						declare -gA ports_needed
-						ports_needed["tcp"]=""
-						ports_needed["udp"]="${dhcp_port}"
-						if check_busy_ports; then
-							et_mode="et_sniffing"
-							et_dos_menu
-						fi
-					fi
-				else
-					echo
-					language_strings "${language}" 281 "red"
-					language_strings "${language}" 115 "read"
-				fi
-			fi
-		;;
-		7)
-			if contains_element "${et_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
-			else
-				current_iface_on_messages="${interface}"
-				if check_interface_wifi "${interface}"; then
-					get_bettercap_version
-					if compare_floats_greater_or_equal "${bettercap_version}" "${bettercap2_version}" && ! compare_floats_greater_or_equal "${bettercap_version}" "${bettercap2_sslstrip_working_version}"; then
-						echo
-						language_strings "${language}" 174 "red"
-						language_strings "${language}" 115 "read"
-					else
-						if [ "${adapter_vif_support}" -eq 0 ]; then
-							ask_yesno 696 "no"
-							if [ "${yesno}" = "y" ]; then
-								et_attack_adapter_prerequisites_ok=1
-							fi
-						else
-							et_attack_adapter_prerequisites_ok=1
-						fi
-
-						if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
-
-							declare -gA ports_needed
-							ports_needed["tcp"]="${bettercap_proxy_port}"
-							ports_needed["udp"]="${dhcp_port} ${bettercap_dns_port}"
-							if check_busy_ports; then
-								et_mode="et_sniffing_sslstrip2"
-								et_dos_menu
-							fi
-						fi
-					fi
-				else
-					echo
-					language_strings "${language}" 281 "red"
-					language_strings "${language}" 115 "read"
-				fi
-			fi
-		;;
-		8)
-			beef_pre_menu
-		;;
-		9)
-			if contains_element "${et_option}" "${forbidden_options[@]}"; then
-				forbidden_menu_option
-			else
-				current_iface_on_messages="${interface}"
-				if check_interface_wifi "${interface}"; then
-					if [ "${adapter_vif_support}" -eq 0 ]; then
-						ask_yesno 696 "no"
-						if [ "${yesno}" = "y" ]; then
-							et_attack_adapter_prerequisites_ok=1
-						fi
-					else
-						et_attack_adapter_prerequisites_ok=1
-					fi
-
-					if [ "${et_attack_adapter_prerequisites_ok}" -eq 1 ]; then
-
-						declare -gA ports_needed
-						ports_needed["tcp"]="${dns_port} ${www_port}"
-						ports_needed["udp"]="${dns_port} ${dhcp_port}"
-						if check_busy_ports; then
-							et_mode="et_captive_portal"
-							echo
-							language_strings "${language}" 316 "yellow"
-							language_strings "${language}" 115 "read"
-
-							if explore_for_targets_option "WPA"; then
-								et_dos_menu
-							fi
-						fi
-					fi
-				else
-					echo
-					language_strings "${language}" 281 "red"
-					language_strings "${language}" 115 "read"
-				fi
-			fi
-		;;
-		*)
-			invalid_menu_option
-		;;
-	esac
+		else
+			echo
+			language_strings "${language}" 281 "red"
+			language_strings "${language}" 115 "read"
+		fi
+	fi
+	invalid_menu_option
 
 	evil_twin_attacks_menu
 }
@@ -19547,7 +19339,7 @@ function main() {
 	select_interface
 	initialize_menu_options_dependencies
 	remove_warnings
-	main_menu
+	evil_twin_attacks_menu
 }
 
 #Script starts to execute stuff from this point, traps and then the main function
