@@ -3018,6 +3018,8 @@ function select_secondary_interface() {
 		if [[ "${1}" = "dos_pursuit_mode" ]] || [[ "${1}" = "secondary_interface" ]]; then
 			language_strings "${language}" 510 "red"
 		elif [ "${1}" = "internet" ]; then
+
+			# 여기서 오류남
 			language_strings "${language}" 280 "red"
 		fi
 		language_strings "${language}" 115 "read"
