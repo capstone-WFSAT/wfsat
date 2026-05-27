@@ -1279,6 +1279,16 @@ function _et_cleanup() {
 function exec_et_sniffing_attack() {
 	debug_print
 	trap '_et_cleanup' SIGINT SIGTERM
+
+	# Ensure interface is in managed mode and up before hostapd
+	echo "[*] Setting ${interface} to managed mode..."
+	ip link set "${interface}" down > /dev/null 2>&1
+	iw "${interface}" set type managed > /dev/null 2>&1
+	ip link set "${interface}" up > /dev/null 2>&1
+
+	# Write channel file for control window display
+	echo "${channel}" > "${tmpdir}${channelfile}"
+
 	set_hostapd_config
 	launch_fake_ap
 	set_network_interface_data
