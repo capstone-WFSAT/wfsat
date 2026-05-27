@@ -415,17 +415,10 @@ session_name="airgeddon"
 tmux_main_window="airgeddon-Main"
 no_hardcore_exit=0
 
-#Check coherence between script and language_strings file
-
 # Source utility and attack modules
 scriptdir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 source "${scriptdir}/wfast_utils.sh"
 source "${scriptdir}/wfast_attacks.sh"
-
-
-#Download the language strings file
-
-#Set messages for language_strings handling
 
 #Generic toggle option function
 function option_toggle() {
@@ -481,14 +474,6 @@ function option_toggle() {
 	return 0
 }
 
-#Get current permanent language
-
-#Set language as permanent
-
-#Print the current line of where this was called and the function's name. Applies to some (which are useful) functions
-
-#Set the message to show again after an interrupt ([Ctrl+C] or [Ctrl+Z]) without exiting
-
 #Add the text on a menu when you miss an optional tool
 function special_text_missed_optional_tool() {
 
@@ -519,57 +504,6 @@ function special_text_missed_optional_tool() {
 	fi
 }
 
-#Generate the chars in front of and behind a text for titles and separators
-
-#Wrapper to check managed mode on an interface
-
-#Wrapper to check monitor mode on an interface
-
-#Check for monitor mode on an interface
-
-#Check if an interface is a Wi-Fi adapter or not
-
-#Create a list of interfaces associated to their MAC addresses
-
-#Check the interface coherence between interface names and MAC addresses
-
-#Check if an adapter is compatible to airmon
-
-#Add contributing footer to a file
-
-#Prepare the vars to be used on wps pin database attacks
-
-#Check if wash has JSON option
-
-#Check if wash has dual scan option
-
-#Perform wash scan using -j (json) option to gather needed data
-
-#Calculate pin based on Zhao Chunsheng algorithm (ComputePIN), step 1
-
-#Calculate pin based on Zhao Chunsheng algorithm (ComputePIN), step 2
-
-#Calculate pin based on Stefan Viehböck algorithm (EasyBox)
-#shellcheck disable=SC2207
-
-#Calculate pin based on Arcadyan algorithm
-
-#Calculate the last digit on pin following the checksum rule
-
-#Manage the calls to check common wps pin algorithms
-
-#Integrate calculated pins from algorithms into pins array
-
-#Search for target wps bssid MAC address in pin database and set the vars to be used
-#shellcheck disable=SC2128
-
-#Handler for multiple busy port checkings
-
-#Validate if a given tcp/udp port is busy on the given interface
-#shellcheck disable=SC2207
-
-#Find process name from a given port
-
 #Convert an IP address from decimal to hexdecimal returning its value
 ip_dec_to_hex() {
 
@@ -585,20 +519,6 @@ ip_dec_to_hex() {
 
 	echo "${hex}"
 }
-
-#Validate if a wireless adapter is supporting VIF (Virtual Interface Functionality)
-
-#Returns warning messages if long Wi-Fi names detected
-
-#Find the physical interface for an adapter
-
-#Check the wireless stamdards supported by a given physical adapter
-
-#Check the bands supported by a given physical adapter
-
-#Check 5Ghz band info from a given physical interface
-
-#Detect country code and if region is set
 
 #Prepare monitor mode avoiding the use of airmon-ng or airmon-zc generating two interfaces from one for WPA3 downgrade attack
 function prepare_wpa3_downgrade_monitor() {
@@ -2893,7 +2813,7 @@ function enterprise_identities_and_certitifcates_analysis() {
 	dos_info_gathering_enterprise_menu "${1}"
 }
 
-#Validate if selected network is the needed type (enterprise or personal)
+# 네트워크 타입 선택 (개인용/기업용)
 function validate_network_type() {
 
 	debug_print
@@ -2983,14 +2903,6 @@ function validate_network_encryption_type() {
 
 	return 0
 }
-
-#Execute wep besside attack
-#shellcheck disable=SC2164
-
-#Execute wep all-in-one attack
-#shellcheck disable=SC2164
-
-#Kill the wep attack processes
 
 #Prepare wep attacks deleting temp files
 function prepare_wep_attack() {
@@ -3556,26 +3468,6 @@ function set_wep_script() {
 	EOF
 }
 
-#Execute wps custom pin bully attack
-
-#Execute wps custom pin reaver attack
-
-#Execute bully pixie dust attack
-
-#Execute reaver pixie dust attack
-
-#Execute wps bruteforce pin bully attack
-
-#Execute wps bruteforce pin reaver attack
-
-#Execute wps pin database bully attack
-
-#Execute wps pin database reaver attack
-
-#Execute wps null pin reaver attack
-
-#Execute DoS pursuit mode attack
-
 #Parse and control pids for DoS pursuit mode attack
 pid_control_pursuit_mode() {
 
@@ -3631,18 +3523,6 @@ pid_control_pursuit_mode() {
 
 	kill_dos_pursuit_mode_processes
 }
-
-#Execute mdk deauth DoS attack
-
-#Execute aireplay DoS attack
-
-#Execute WDS confusion DoS attack
-
-#Execute Beacon flood DoS attack
-
-#Execute Auth DoS attack
-
-#Execute Michael Shutdown DoS attack
 
 #Validate mdk parameters
 function mdk_deauth_option() {
@@ -3711,10 +3591,6 @@ function mdk_deauth_option() {
 
 	exec_mdkdeauth
 }
-
-#Switch mdk version
-
-#Set mdk to selected version validating its existence
 
 #Validate Aireplay parameters
 function aireplay_deauth_option() {
@@ -4804,28 +4680,6 @@ function hookable_for_menus() {
 	return 1
 }
 
-#Clean environment vars
-
-#Control the status of the routing taking into consideration instances orchestration
-
-#Clean temporary files
-
-#Manage cleaning firewall rules and restore orginal routing state
-
-#Save iptables/nftables rules
-
-#Restore iptables/nftables rules
-
-#Prepare iptables/nftables after a clean to avoid errors
-
-#Clean only this instance iptables/nftables rules
-
-#Clean all iptables/nftables rules
-
-#Contains the logic to decide what iptables/nftables rules to clean
-
-#Create an array from parameters
-
 #Check if something (first parameter) is inside an array (second parameter)
 contains_element() {
 
@@ -4837,26 +4691,6 @@ contains_element() {
 	done
 	return 1
 }
-
-#Print hints from the different hint pools depending on the menu
-
-#Function created empty intentionally to be hooked from plugins to modify hints easily
-
-#Initialize instances related actions
-
-#Detect number of the alive airgeddon instances and set the next one if apply
-
-#Create orchestrator file if needed
-
-#Delete orchestrator file if exists
-
-#Register instance pid into orchestrator file if is not already registered
-
-#Detect and return the number of airgeddon running instances
-
-#Check if this instance is the first one modifying routing state
-
-#Check if this instance is the last airgeddon instance running
 
 #Enterprise attacks menu
 function enterprise_attacks_menu() {
@@ -5942,8 +5776,6 @@ function ask_capture_hash_file() {
 	language_strings "${language}" 189 "yellow"
 }
 
-#Manage the questions on Handshake/PMKID/enterprise file questions
-
 #Manage the questions on challenge response input
 manage_asking_for_challenge_response() {
 
@@ -5961,25 +5793,6 @@ manage_asking_for_challenge_response() {
 		read_response
 	done
 }
-
-#Manage the questions on dictionary file questions
-
-#Manage the questions on rules file questions
-
-#Check if a hash is present in hostapd-mana log
-
-#Validate the file to be cleaned
-
-#Check if an essid is present on the mdk3/mdk4 log file to know if it is decloaked for that bssid
-
-#Check if an essid is present on a capture file to know if it is decloaked for that bssid
-
-#Check if enterprise certificates are present on a capture file
-#shellcheck disable=SC2059
-
-#Check if enterprise identities are present on a capture file
-
-#Check if a bssid is present on a capture file to know if there is a Handshake/PMKID with that bssid
 
 #Set the target vars to a bssid selecting them from a capture file which has a Handshake/PMKID
 function select_wpa_bssid_target_from_captured_file() {
@@ -6104,14 +5917,6 @@ function select_wpa_bssid_target_from_captured_file() {
 
 	return 0
 }
-
-#Validate if given file has a valid enterprise john the ripper format
-
-# Check if hashcat hash are correct in a file (first line)
-
-#Convert legacy -m 2500 hashcat format into -m 22000 hashcat format
-
-#Validate if given file has a valid enterprise hashcat format
 
 #Validate and ask for the different parameters used in an enterprise asleap dictionary based attack
 function enterprise_asleap_dictionary_attack_option() {
@@ -6373,44 +6178,6 @@ function hashcat_rulebased_attack_option() {
 	exec_hashcat_rulebased_attack "${1}"
 	manage_hashcat_pot "${1}"
 }
-
-#Check if the password was decrypted using hashcat and manage to save it on a file
-
-#Check if the password was decrypted using john the ripper and manage to save it on a file
-
-#Check if the password was decrypted using aircrack and manage to save it on a file
-
-#Check if hashes were captured during WPA3 downgrade attack
-
-#Check if the password was decrypted using asleap against challenges and responses
-
-#Check if the wep besside password was captured and manage to save it on a file
-
-#Check if the passwords were captured using ettercap and manage to save them on a file
-
-#Check if the passwords were captured using bettercap and manage to save them on a file
-
-#Check if the passwords were captured using wps attacks and manage to save them on a file
-
-#Check if the password was captured using wep all-in-one or besside-ng attack and manage to save it on a file
-
-#Check if a hash or a password was captured using Evil Twin Enterprise attack and manage to save it on a directory
-
-#Check to save certs for Evil Twin Enterprise attack
-
-#Save created cert files to user's location
-
-#Check if the passwords were captured using the captive portal Evil Twin attack and manage to save them on a file
-
-#Handle enterprise log captures
-
-#Parse enterprise log to create trophy files
-
-#Prepare dir for enterprise trophy files
-
-#Write enterprise captured hashes to trophy file
-
-#Write enterprise captured passwords to trophy file
 
 #Captive portal language menu
 function set_captive_portal_language() {
@@ -6720,40 +6487,6 @@ function set_show_charset() {
 	esac
 }
 
-#Execute aircrack+crunch bruteforce attack
-
-#Execute aircrack dictionary attack
-
-#Execute john the ripper dictionary attack
-
-#Execute john the ripper bruteforce attack
-
-#Execute hashcat dictionary attack
-
-#Execute hashcat bruteforce attack
-
-#Execute hashcat rule based attack
-
-#Execute WPA3 downgrade attack
-
-#Execute Enterprise smooth/noisy attack
-
-#Manage and handle asleap attack integrated on Evil Twin and Enterprise
-
-#Menu for captured enterprise user selection
-
-#Execute asleap attack
-
-#Execute Evil Twin only Access Point attack
-
-#Execute Evil Twin with sniffing attack
-
-#Execute Evil Twin with sniffing+bettercap-sslstrip2 attack
-
-#Execute Evil Twin with sniffing+bettercap-sslstrip2/beef attack
-
-#Execute captive portal Evil Twin attack
-
 #Create configuration files for bettercap
 function set_bettercap_config() {
 
@@ -6867,9 +6600,12 @@ function set_hostapd_config() {
 
 	get_hostapd_version
 
+	# 남아있는 설정 파일 삭제
 	rm -rf "${tmpdir}${hostapd_file}" > /dev/null 2>&1
 
+	# MAC 스푸핑 사용하면 스킵
 	et_bssid=$(generate_fake_bssid "${bssid}")
+	# 보이지 않는 유니코드 문자를 붙임
 	et_essid=$(generate_fake_essid "${essid}")
 
 	{
@@ -6919,6 +6655,7 @@ function set_hostapd_config() {
 	if compare_floats_greater_or_equal "${hostapd_version}" "${hostapd_wifi7_version}"; then
 		if [ "${standard_80211be}" -eq 1 ]; then
 			{
+			# WiFi 7 설정
 			echo -e "ieee80211be=1"
 			} >> "${tmpdir}${hostapd_file}"
 		fi
@@ -7009,7 +6746,7 @@ function set_hostapd_wpe_config() {
 	fi
 }
 
-#Switch a digit from an original given bssid
+# 타겟 bssid랑 한글자 다른 bssid 생성
 function generate_fake_bssid() {
 
 	debug_print
@@ -7077,6 +6814,7 @@ function launch_fake_ap() {
 
 	debug_print
 
+	# 충돌로 인해 NetworkManager 강제 종료
 	if "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
 		${airmon} check kill > /dev/null 2>&1
 		nm_processes_killed=1
@@ -7087,6 +6825,7 @@ function launch_fake_ap() {
 		fi
 	fi
 
+	# MAC 스푸핑 선택시 실행
 	if [ "${mac_spoofing_desired}" -eq 1 ]; then
 		set_spoofed_mac "${interface}"
 	fi
@@ -7124,12 +6863,17 @@ function launch_fake_ap() {
 	fi
 
 	manage_output "-hold -bg \"#000000\" -fg \"#00FF00\" -geometry ${hostapd_scr_window_position} -T \"AP\"" "${command}${log_command}" "AP"
+
+	# 공격 종료 후 프로세스를 죽이기 위해 저장
+	# xterm 일떄
 	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
 		et_processes+=($!)
 		if [ "${dos_pursuit_mode}" -eq 1 ]; then
 			dos_pursuit_mode_ap_pid=$!
 			dos_pursuit_mode_pids+=("${dos_pursuit_mode_ap_pid}")
 		fi
+
+	# tmux 일때
 	else
 		get_tmux_process_id "${command}"
 		et_processes+=("${global_process_pid}")
@@ -7142,7 +6886,7 @@ function launch_fake_ap() {
 	sleep 3
 }
 
-#Set network data parameters
+#Fake ap 네트워크에서 사용할 IP 주소 할당
 function set_network_interface_data() {
 
 	debug_print
@@ -7160,6 +6904,7 @@ function set_network_interface_data() {
 	third_octet="1"
 	fourth_octet="0"
 
+	# 대역을 쉽게 바꾸기 위해 옥텟으로 관리
 	ip_range="${first_octet}.${second_octet}.${third_octet}.${fourth_octet}"
 
 	if ip route | grep ${ip_range} > /dev/null; then
@@ -7179,7 +6924,8 @@ function set_network_interface_data() {
 	et_range_stop="${first_octet}.${second_octet}.${third_octet}.100"
 }
 
-#Create configuration file for dhcpd
+# DHCP 서버 설정 파일 생성
+# IP 자동 할당
 function set_dhcp_config() {
 
 	debug_print
@@ -7199,8 +6945,12 @@ function set_dhcp_config() {
 	} >> "${tmpdir}${dhcpd_file}"
 
 	if [ "${et_mode}" != "et_captive_portal" ]; then
+
+		# 실제 DNS 서버 사용
 		echo -e "\toption domain-name-servers ${internet_dns1}, ${internet_dns2};" >> "${tmpdir}${dhcpd_file}"
 	else
+
+		# captive_portal 모드일 경우 공격자의 DNS 서버 사용
 		echo -e "\toption domain-name-servers ${et_ip_router};" >> "${tmpdir}${dhcpd_file}"
 	fi
 
@@ -7209,6 +6959,8 @@ function set_dhcp_config() {
 	echo -e "}"
 	} >> "${tmpdir}${dhcpd_file}"
 
+
+	# IP 할당 내역을 기록하는 leases 파일 위치
 	leases_found=0
 	for item in "${!possible_dhcp_leases_files[@]}"; do
 		if [ -f "${possible_dhcp_leases_files[${item}]}" ]; then
@@ -7218,6 +6970,7 @@ function set_dhcp_config() {
 		fi
 	done
 
+	# leases 파일이 없으면 생성
 	if [ "${leases_found}" -eq 1 ]; then
 		echo -e "lease-file-name \"${possible_dhcp_leases_files[${key_leases_found}]}\";" >> "${tmpdir}${dhcpd_file}"
 		chmod a+w "${possible_dhcp_leases_files[${key_leases_found}]}" > /dev/null 2>&1
@@ -7227,6 +6980,7 @@ function set_dhcp_config() {
 		chmod a+w "${possible_dhcp_leases_files[0]}" > /dev/null 2>&1
 	fi
 
+	# AppArmor (리눅스 보안 모듈) 우회 처리
 	dhcp_path="${tmpdir}${dhcpd_file}"
 	if hash apparmor_status 2> /dev/null; then
 		if apparmor_status 2> /dev/null | grep dhcpd > /dev/null; then
@@ -7269,26 +7023,29 @@ function set_spoofed_mac() {
 	ip link set "${1}" up > /dev/null 2>&1
 }
 
-#Restore spoofed MAC addresses to original values
 
-#Set routing state and firewall rules for Evil Twin attacks
+# 라우팅 규칙 설정
 function set_std_internet_routing_rules() {
 
 	debug_print
 
+	# 현재 방화벽 규칙 백업
 	control_routing_status "start"
 	if [ ! -f "${system_tmpdir}${routing_tmp_file}" ]; then
 		save_iptables_nftables
 	fi
 
+	# 공격자 IP 및 라우팅 설정
 	ip addr add "${et_ip_router}/${std_c_mask}" dev "${interface}" > /dev/null 2>&1
 	ip route add "${et_ip_range}/${std_c_mask_cidr}" dev "${interface}" table local proto static scope link > /dev/null 2>&1
 	routing_modified=1
 
 	clean_initialize_iptables_nftables "start"
 
+	# IP 포워딩 활성화
 	echo "1" > /proc/sys/net/ipv4/ip_forward 2> /dev/null
 
+	# 공격별 iptables 규칙
 	if [ "${et_mode}" = "et_captive_portal" ]; then
 		if [ "${iptables_nftables}" -eq 1 ]; then
 			"${iptables_cmd}" add rule ip nat_"${airgeddon_instance_name}" prerouting_"${airgeddon_instance_name}" iifname "${interface}" tcp dport "${www_port}" counter dnat to "${et_ip_router}:${www_port}"
@@ -7325,6 +7082,7 @@ function set_std_internet_routing_rules() {
 		fi
 	fi
 
+	# NAT MASQUERADE (피해자 -> 가해자 -> 인터넷) IP 변환
 	if [ "${et_mode}" != "et_captive_portal" ]; then
 		if [ "${iptables_nftables}" -eq 1 ]; then
 			"${iptables_cmd}" add rule nat_"${airgeddon_instance_name}" postrouting_"${airgeddon_instance_name}" ip saddr "${et_ip_range}/${std_c_mask_cidr}" oifname "${internet_interface}" counter masquerade
@@ -7333,6 +7091,7 @@ function set_std_internet_routing_rules() {
 		fi
 	fi
 
+	# ICMP 허용 및 나머지 차단
 	if [ "${iptables_nftables}" -eq 1 ]; then
 		"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" iifname "${interface}" ip daddr "${et_ip_router}/${ip_mask_cidr}" icmp type echo-request ct state new,related,established counter accept
 		"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" ip daddr "${et_ip_router}/${ip_mask_cidr}" counter drop
@@ -9174,44 +8933,6 @@ function launch_bettercap_sniffing() {
 	fi
 }
 
-#Parse ettercap log searching for captured passwords
-
-#Parse bettercap log searching for captured passwords
-
-#Write on a file the id of the Evil Twin attack processes
-
-#Kill a given PID and all its subprocesses recursively
-	function kill_pid_and_children_recursive() {
-
-	debug_print
-
-	local parent_pid=""
-	local child_pids=""
-
-	parent_pid="${1}"
-	child_pids=$(pgrep -P "${parent_pid}" 2> /dev/null)
-
-	for child_pid in ${child_pids}; do
-		kill_pid_and_children_recursive "${child_pid}"
-	done
-	if [ -n "${child_pids}" ]; then
-		pkill -P "${parent_pid}" &> /dev/null
-	fi
-
-	kill "${parent_pid}" &> /dev/null
-	wait "${parent_pid}" 2> /dev/null
-	}
-
-#Kill the WPA3 downgrade attack processes
-
-#Kill the Evil Twin and Enterprise processes
-
-#Kill DoS pursuit mode processes
-
-#Set current channel reading it from file
-
-#Convert capture file to hashcat format
-
 #Handshake/PMKID/Decloaking tools menu
 function handshake_pmkid_decloaking_tools_menu() {
 
@@ -9302,8 +9023,6 @@ function handshake_pmkid_decloaking_tools_menu() {
 
 	handshake_pmkid_decloaking_tools_menu
 }
-
-#Execute the cleaning of a Handshake file
 
 #Validate and ask for the parameters used to clean a Handshake file
 function clean_handshake_file_option() {
@@ -9476,25 +9195,6 @@ function decloak_prequisites() {
 		exec_decloak_by_dictionary
 	fi
 }
-
-#Execute mdk decloak by dictionary
-
-#Capture Handshake on Handshake/PMKID tools
-
-#Check if file exists
-
-#Validate path
-
-#It checks for write permissions of a directory recursively
-
-#Check for write permissions on a given path
-
-#Clean some special chars from strings usually messing with autocompleted paths
-
-#Create a var with the name passed to the function and reading the value from the user input
-
-#Sanitize input used for paths
-#shellcheck disable=SC2001
 
 #Read and validate a path
 function read_path() {
@@ -10899,11 +10599,14 @@ function et_prerequisites() {
 		esac
 	fi
 
+	# 어떤 무선 랜카드를 사용하고 있는지 확인
 	print_iface_selected
 	if [ -n "${enterprise_mode}" ]; then
+		#타겟 ap 정보 출력
 		print_all_target_vars
 	else
 		print_et_target_vars
+		#인터넷에 연결된 인터페이스의 정보 출력	
 		print_iface_internet_selected
 	fi
 
@@ -10918,6 +10621,8 @@ function et_prerequisites() {
 		echo
 		language_strings "${language}" 276 "yellow"
 		print_simple_separator
+
+		# 공격 실행 확인 프롬프트
 		ask_yesno 277 "yes"
 		if [ "${yesno}" = "n" ]; then
 			if [ -n "${enterprise_mode}" ]; then
@@ -10930,6 +10635,7 @@ function et_prerequisites() {
 		fi
 	fi
 
+	# MAC 스푸핑 여부
 	if [[ -z "${mac_spoofing_desired}" ]] || [[ "${mac_spoofing_desired}" -eq 0 ]]; then
 		ask_yesno 419 "no"
 		if [ "${yesno}" = "y" ]; then
@@ -10983,6 +10689,8 @@ function et_prerequisites() {
 		echo
 		language_strings "${language}" 31 "blue"
 	else
+
+		# bssid 입력 (스킵)
 		if ! ask_bssid; then
 			if [ -n "${enterprise_mode}" ]; then
 				return_to_enterprise_main_menu=1
@@ -10993,6 +10701,7 @@ function et_prerequisites() {
 			return
 		fi
 
+		# 스킵
 		if ! ask_channel; then
 			if [ -n "${enterprise_mode}" ]; then
 				return_to_enterprise_main_menu=1
@@ -11013,9 +10722,12 @@ function et_prerequisites() {
 				return
 			fi
 		fi
+
+		# essid 값이 있고 hidden이 아니면 스킵
 		ask_essid "noverify"
 	fi
 
+	#네트워크 타입 (개인용/기업용)
 	if [ -n "${enterprise_mode}" ]; then
 		if ! validate_network_type "enterprise"; then
 			return_to_enterprise_main_menu=1
@@ -11028,10 +10740,12 @@ function et_prerequisites() {
 		fi
 	fi
 
+	# 탈취한 계정/패스워드 저장 설정
+	# 저장 경로, 사용 도구, 함수 설정
 	if [ -n "${enterprise_mode}" ]; then
-		manage_enterprise_log
+		manage_enterprise_log # 기업용
 	elif [ "${et_mode}" = "et_sniffing" ]; then
-		manage_ettercap_log
+		manage_ettercap_log # 개인용
 	elif [[ "${et_mode}" = "et_sniffing_sslstrip2" ]] || [[ "${et_mode}" = "et_sniffing_sslstrip2_beef" ]]; then
 		manage_bettercap_log
 	elif [ "${et_mode}" = "et_captive_portal" ]; then
@@ -11099,8 +10813,11 @@ function et_prerequisites() {
 	echo
 	language_strings "${language}" 296 "yellow"
 	language_strings "${language}" 115 "read"
+
+	# Fake Ap를 만들기 위해 Manage 모드로 변경
 	prepare_et_interface
 
+	# 타겟 정보 임시 저장
 	rm -rf "${tmpdir}${channelfile}" > /dev/null 2>&1
 	echo "${channel}" > "${tmpdir}${channelfile}"
 
@@ -11112,6 +10829,7 @@ function et_prerequisites() {
 				exec_et_onlyap_attack
 			;;
 			"et_sniffing")
+				# 해당 함수 사용
 				exec_et_sniffing_attack
 			;;
 			"et_sniffing_sslstrip2")
@@ -11610,87 +11328,6 @@ function hardcore_exit() {
 	fi
 }
 
-#Generate a small time loop printing some dots
-
-#Detect iptables/nftables
-
-#Determine which version of airmon to use
-
-#Set hashcat parameters based on version
-
-#Detects if your arping version is the right one or if it is the bad iputils-arping
-
-#Detects if John the Ripper is able to perform the attacks
-
-#Determine aircrack version
-#shellcheck disable=SC2034
-
-#Determine john the ripper version
-
-#Determine hashcat version
-
-#Determine hcxdumptool version
-
-#Determine beef version
-
-#Determine bettercap version
-
-#Determine hostapd version
-
-#Determine hostapd-wpe version
-
-#Determine bully version
-
-#Determine reaver version
-
-#Set verbosity for bully based on version
-
-#Validate if bully version is able to perform integrated pixiewps attack
-
-#Validate if reaver version is able to perform integrated pixiewps attack
-
-#Validate if reaver version is able to perform null pin attack
-
-#Validate if wash version is able to perform 5Ghz dual scan
-
-#Validate if aircrack version is valid to interact with WPA3
-
-#Validate if hashcat version is able to perform pmkid cracking
-
-#Detects if operating in a VM and detects VM vendor
-
-#Set the script folder var if necessary
-
-#Set the default directory for saving files
-
-#Return absolute path for a given string path
-
-#Check if pins database file exist and try to download the new one if proceed
-
-#Get and write options form options config file
-
-#Download the options config file
-
-#Download the pins database file
-
-#Ask for try to download pin db file again and set the var to skip it
-
-#Get the checksum for local pin database file
-
-#Get the checksum for remote pin database file
-
-#Check for possible non Linux operating systems
-
-#First phase of Linux distro detection based on uname output
-
-#Second phase of Linux distro detection based on architecture and version file
-
-#Detect if arm architecture is present on system
-
-#Set some useful vars based on Linux distro
-
-#Determine if NetworkManager must be killed on your system. Only needed for previous versions of 1.0.12
-
 #Do some checks for some general configuration
 function general_checkings() {
 
@@ -11738,9 +11375,6 @@ check_wsl() {
 	fi
 }
 
-#Check if the user is root
-
-#Print Linux known distros
 #shellcheck disable=SC2207
 function print_known_distros() {
 
@@ -11756,17 +11390,6 @@ function print_known_distros() {
 	done
 	echo
 }
-
-#Check if you have installed the tools (essential, optional and update) that the script uses
-#shellcheck disable=SC2059
-
-#Check for the minimum bash version requirement
-
-#Check if you have installed the tools required to update the script
-
-#Update UI layout
-
-#Check if window size is enough for intro
 
 #Print the script intro
 function print_intro() {
@@ -12009,23 +11632,6 @@ function initialize_script_settings() {
 	vm_vendor=""
 }
 
-#Detect graphics system
-
-#Detect if there is a working graphics system
-
-#Detect screen resolution if possible
-
-#Set windows sizes and positions
-
-#Set sizes for x-axis
-
-#Set sizes for y axis
-
-#Set positions for y-axis
-
-#Recalculate windows sizes and positions
-
-#Initialization of env vars
 #shellcheck disable=SC2145
 function env_vars_initialization() {
 
@@ -12216,57 +11822,6 @@ function create_rcfile() {
 	done
 }
 
-#Detect if airgeddon is working inside a docker container
-
-#Set sounds for evil twin attacks if set
-
-#Set colorization output if set
-
-#Remap colors vars
-
-#Initialize colors vars
-
-#Kill tmux session started by airgeddon
-
-#Initialize tmux if apply
-
-#Starting point of airgeddon script inside newly created tmux session
-
-#Create new tmux session exclusively for airgeddon
-
-#Start supporting scripts inside its own tmux window
-
-#Check if script is currently executed inside tmux session or not
-
-#Hand over script execution to tmux and call function to create a new session
-
-#Function to kill tmux windows using window name
-
-#Function to pause script execution in the main window until a process has finished executing or the user terminates it
-#shellcheck disable=SC2009
-
-#Function to capture PID of a process started inside tmux and setting it to a global variable
-#shellcheck disable=SC2009
-
-#Centralized function to launch window using xterm/tmux
-
-#Plugins initialization, parsing and validations handling
-
-#Validate if plugin meets the needed requirements
-
-#Apply modifications to functions with defined plugins changes
-#shellcheck disable=SC2086,SC2001
-
-#Plugins function handler in charge of managing prehook, posthooks and override function calls
-
-#Avoid the problem of using airmon-zc without ethtool installed
-
-#Check if the first float argument is greater than the second
-
-#Check if the first float argument is greater than or equal to the second float argument
-
-#Update and relaunch the script
-
 #Validate if the selected internet interface has internet access
 function validate_et_internet_interface() {
 
@@ -12295,56 +11850,6 @@ function validate_et_internet_interface() {
 	internet_interface_selected=1
 	return 0
 }
-
-#Check for access to airgeddon repository
-
-#Check for active internet connection
-
-#Check for access to a URL using curl
-
-#Check for access to a URL using wget
-
-#Detect if there is an http proxy configured on the system
-
-#Check for default route on an interface
-
-#Update the script if your version is outdated
-
-#Change script language automatically if OS language is supported by the script and different from the current language
-
-#Detect if the current language is a supported RTL (Right To Left) language
-
-#Clean some known and controlled warnings for ShellCheck
-
-#Print a simple separator
-
-#Print a large separator
-
-#Add the PoT prefix on printed strings if PoT mark is found
-
-#Print under construction message used on some menu entries
-
-#Canalize the echo functions
-
-#Print green messages
-
-#Print blue messages
-
-#Print yellow messages
-
-#Print red messages
-
-#Print red messages using a slimmer thickness
-
-#Print black messages with background for titles
-
-#Print pink messages
-
-#Print cyan messages
-
-#Print brown messages
-
-#Print white messages
 
 #Script starting point
 function main() {

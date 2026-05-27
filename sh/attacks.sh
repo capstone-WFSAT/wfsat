@@ -831,6 +831,7 @@ function exec_et_sniffing_attack() {
 
 	debug_print
 
+	# 타겟 ap 설정 복사
 	set_hostapd_config
 	launch_fake_ap
 	set_network_interface_data

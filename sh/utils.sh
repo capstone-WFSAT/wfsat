@@ -2,6 +2,129 @@
 # utils.sh - Utility and helper functions
 # Auto-split from wfast.sh
 
+
+function manage_ettercap_log() {
+
+	debug_print
+
+	ettercap_log=0
+	ask_yesno 302 "yes"
+	if [ "${yesno}" = "y" ]; then
+		ettercap_log=1
+		default_ettercap_logpath="${default_save_path}"
+		default_ettercaplogfilename=$(sanitize_path "evil_twin_captured_passwords-${essid}.txt")
+		rm -rf "${tmpdir}${ettercap_file}"* > /dev/null 2>&1
+		tmp_ettercaplog="${tmpdir}${ettercap_file}"
+		default_ettercap_logpath="${default_ettercap_logpath}${default_ettercaplogfilename}"
+		validpath=1
+		while [[ "${validpath}" != "0" ]]; do
+			read_path "ettercaplog"
+		done
+	fi
+}
+
+
+function get_hostapd_version() {
+
+	debug_print
+
+	hostapd_version=$(hostapd -v 2>&1 | grep -oiP '^hostapd v\K[0-9]+\.[0-9]+')
+}
+
+function compare_floats_greater_or_equal() {
+
+	debug_print
+
+	awk -v n1="${1}" -v n2="${2}" 'BEGIN{if (n1>=n2) exit 0; exit 1}'
+}
+
+function manage_output() {
+
+	debug_print
+
+	local xterm_parameters
+	local tmux_command_line
+	local xterm_command_line
+	local window_name
+	local command_tail
+
+	xterm_parameters="${1}"
+	tmux_command_line="${2}"
+	xterm_command_line="\"${2}\""
+	window_name="${3}"
+	command_tail=" > /dev/null 2>&1 &"
+
+	case "${AIRGEDDON_WINDOWS_HANDLING}" in
+		"tmux")
+			local tmux_color
+			tmux_color=""
+			[[ "${1}" =~ -fg[[:blank:]](\")?(#[0-9a-fA-F]+) ]] && tmux_color="${BASH_REMATCH[2]}"
+			case "${4}" in
+				"active")
+					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}" "active"
+				;;
+				*)
+					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}"
+				;;
+			esac
+		;;
+		"xterm")
+			eval "xterm ${xterm_parameters} -e ${xterm_command_line}${command_tail}"
+		;;
+	esac
+}
+
+function control_routing_status() {
+
+	debug_print
+
+	local saved_routing_status_found=""
+	local original_routing_status=""
+	local etset=""
+	local agpid=""
+	local et_still_running=0
+
+	if [ "${1}" = "start" ]; then
+		readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat < "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
+		for item in "${AIRGEDDON_PIDS[@]}"; do
+			[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && etset="${BASH_REMATCH[1]}" && agpid="${BASH_REMATCH[2]}"
+			if [ -z "${saved_routing_status_found}" ]; then
+				[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && saved_routing_status_found="${BASH_REMATCH[3]}"
+			fi
+
+			if [[ "${agpid_to_use}" = "${agpid}" ]] && [[ "${etset}" != "et" ]]; then
+				sed -ri "s:^(${agpid}):et\1:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
+			fi
+		done
+
+		if [ -z "${saved_routing_status_found}" ]; then
+			original_routing_status=$(cat /proc/sys/net/ipv4/ip_forward)
+			sed -ri "s:^(et${agpid_to_use})$:\1rs${original_routing_status}:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
+		fi
+	else
+		readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat < "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
+		for item in "${AIRGEDDON_PIDS[@]}"; do
+			[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && etset="${BASH_REMATCH[1]}" && agpid="${BASH_REMATCH[2]}"
+			if [ -z "${saved_routing_status_found}" ]; then
+				[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && saved_routing_status_found="${BASH_REMATCH[3]}"
+			fi
+
+			if [[ "${agpid_to_use}" = "${agpid}" ]] && [[ "${etset}" = "et" ]]; then
+				sed -ri "s:^(et${agpid}):${agpid}:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
+			fi
+
+			if [[ "${agpid_to_use}" != "${agpid}" ]] && [[ "${etset}" = "et" ]]; then
+				et_still_running=1
+			fi
+		done
+
+		if [[ -n "${saved_routing_status_found}" ]] && [[ "${et_still_running}" -eq 0 ]]; then
+			original_routing_status="${saved_routing_status_found//[^0-9]/}"
+			echo "${original_routing_status}" > /proc/sys/net/ipv4/ip_forward 2> /dev/null
+		fi
+	fi
+}
+
 function check_language_strings() {
 
 	debug_print
@@ -1201,56 +1324,7 @@ function clean_env_vars() {
 
 	unset AIRGEDDON_AUTO_UPDATE AIRGEDDON_SKIP_INTRO AIRGEDDON_BASIC_COLORS AIRGEDDON_EXTENDED_COLORS AIRGEDDON_AUTO_CHANGE_LANGUAGE AIRGEDDON_SILENT_CHECKS AIRGEDDON_PRINT_HINTS AIRGEDDON_5GHZ_ENABLED AIRGEDDON_FORCE_IPTABLES AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING AIRGEDDON_MDK_VERSION AIRGEDDON_PLUGINS_ENABLED AIRGEDDON_EVIL_TWIN_ESSID_STRIPPING AIRGEDDON_EVIL_TWIN_SOUNDS AIRGEDDON_DEVELOPMENT_MODE AIRGEDDON_DEBUG_MODE AIRGEDDON_WINDOWS_HANDLING
 }
-function control_routing_status() {
 
-	debug_print
-
-	local saved_routing_status_found=""
-	local original_routing_status=""
-	local etset=""
-	local agpid=""
-	local et_still_running=0
-
-	if [ "${1}" = "start" ]; then
-		readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat < "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
-		for item in "${AIRGEDDON_PIDS[@]}"; do
-			[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && etset="${BASH_REMATCH[1]}" && agpid="${BASH_REMATCH[2]}"
-			if [ -z "${saved_routing_status_found}" ]; then
-				[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && saved_routing_status_found="${BASH_REMATCH[3]}"
-			fi
-
-			if [[ "${agpid_to_use}" = "${agpid}" ]] && [[ "${etset}" != "et" ]]; then
-				sed -ri "s:^(${agpid}):et\1:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
-			fi
-		done
-
-		if [ -z "${saved_routing_status_found}" ]; then
-			original_routing_status=$(cat /proc/sys/net/ipv4/ip_forward)
-			sed -ri "s:^(et${agpid_to_use})$:\1rs${original_routing_status}:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
-		fi
-	else
-		readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat < "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
-		for item in "${AIRGEDDON_PIDS[@]}"; do
-			[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && etset="${BASH_REMATCH[1]}" && agpid="${BASH_REMATCH[2]}"
-			if [ -z "${saved_routing_status_found}" ]; then
-				[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && saved_routing_status_found="${BASH_REMATCH[3]}"
-			fi
-
-			if [[ "${agpid_to_use}" = "${agpid}" ]] && [[ "${etset}" = "et" ]]; then
-				sed -ri "s:^(et${agpid}):${agpid}:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
-			fi
-
-			if [[ "${agpid_to_use}" != "${agpid}" ]] && [[ "${etset}" = "et" ]]; then
-				et_still_running=1
-			fi
-		done
-
-		if [[ -n "${saved_routing_status_found}" ]] && [[ "${et_still_running}" -eq 0 ]]; then
-			original_routing_status="${saved_routing_status_found//[^0-9]/}"
-			echo "${original_routing_status}" > /proc/sys/net/ipv4/ip_forward 2> /dev/null
-		fi
-	fi
-}
 function clean_tmpfiles() {
 
 	debug_print
@@ -2609,6 +2683,7 @@ function manage_asleap_pot() {
 		fi
 	fi
 }
+
 function manage_wep_besside_pot() {
 
 	debug_print
@@ -2656,25 +2731,7 @@ function manage_wep_besside_pot() {
 		language_strings "${language}" 115 "read"
 	fi
 }
-function manage_ettercap_log() {
 
-	debug_print
-
-	ettercap_log=0
-	ask_yesno 302 "yes"
-	if [ "${yesno}" = "y" ]; then
-		ettercap_log=1
-		default_ettercap_logpath="${default_save_path}"
-		default_ettercaplogfilename=$(sanitize_path "evil_twin_captured_passwords-${essid}.txt")
-		rm -rf "${tmpdir}${ettercap_file}"* > /dev/null 2>&1
-		tmp_ettercaplog="${tmpdir}${ettercap_file}"
-		default_ettercap_logpath="${default_ettercap_logpath}${default_ettercaplogfilename}"
-		validpath=1
-		while [[ "${validpath}" != "0" ]]; do
-			read_path "ettercaplog"
-		done
-	fi
-}
 function manage_bettercap_log() {
 
 	debug_print
@@ -3604,12 +3661,7 @@ function get_bettercap_version() {
 		bettercap_version=${bettercap_version#"v"}
 	fi
 }
-function get_hostapd_version() {
 
-	debug_print
-
-	hostapd_version=$(hostapd -v 2>&1 | grep -oiP '^hostapd v\K[0-9]+\.[0-9]+')
-}
 function get_hostapd_wpe_version() {
 
 	debug_print
@@ -4943,41 +4995,7 @@ function get_tmux_process_id() {
 		global_process_pid="${process_pid}"
 	fi
 }
-function manage_output() {
 
-	debug_print
-
-	local xterm_parameters
-	local tmux_command_line
-	local xterm_command_line
-	local window_name
-	local command_tail
-
-	xterm_parameters="${1}"
-	tmux_command_line="${2}"
-	xterm_command_line="\"${2}\""
-	window_name="${3}"
-	command_tail=" > /dev/null 2>&1 &"
-
-	case "${AIRGEDDON_WINDOWS_HANDLING}" in
-		"tmux")
-			local tmux_color
-			tmux_color=""
-			[[ "${1}" =~ -fg[[:blank:]](\")?(#[0-9a-fA-F]+) ]] && tmux_color="${BASH_REMATCH[2]}"
-			case "${4}" in
-				"active")
-					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}" "active"
-				;;
-				*)
-					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}"
-				;;
-			esac
-		;;
-		"xterm")
-			eval "xterm ${xterm_parameters} -e ${xterm_command_line}${command_tail}"
-		;;
-	esac
-}
 function parse_plugins() {
 
 	plugins_enabled=()
@@ -5195,12 +5213,7 @@ function compare_floats_greater_than() {
 
 	awk -v n1="${1}" -v n2="${2}" 'BEGIN{if (n1>n2) exit 0; exit 1}'
 }
-function compare_floats_greater_or_equal() {
 
-	debug_print
-
-	awk -v n1="${1}" -v n2="${2}" 'BEGIN{if (n1>=n2) exit 0; exit 1}'
-}
 function download_last_version() {
 
 	debug_print
