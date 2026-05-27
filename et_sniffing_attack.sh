@@ -9,7 +9,7 @@
 # --- 설정 파일 로드 ---
 _config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
 if [ ! -f "${_config_file}" ]; then
-	echo "[!] 설정 파일을 찾을 수 없습니다: ${_config_file}" >&2
+	echo "[!] Config file not found: ${_config_file}" >&2
 	exit 1
 fi
 # shellcheck source=et_config.conf
@@ -752,7 +752,7 @@ function launch_dos_pursuit_mode_attack() {
 
 	if [ "${channel}" -gt 14 ]; then
 		if [ "${interfaces_band_info['main_wifi_interface','5Ghz_allowed']}" -eq 0 ]; then
-			echo "[!] 5GHz 채널이지만 인터페이스가 지원하지 않음" >&2
+			echo "[!] 5GHz channel selected but interface does not support it" >&2
 			kill_dos_pursuit_mode_processes
 			return 1
 		else
@@ -1300,13 +1300,13 @@ function exec_et_sniffing_attack() {
 # ============================================================
 
 if [ "$(id -u)" -ne 0 ]; then
-	echo "[!] root 권한이 필요합니다. sudo로 실행하세요." >&2
+	echo "[!] Root privileges required. Run with sudo." >&2
 	exit 1
 fi
 
 if [ -z "${interface}" ] || [ -z "${internet_interface}" ] || [ -z "${bssid}" ] || [ -z "${essid}" ] || [ -z "${channel}" ] || [ -z "${et_dos_attack}" ]; then
-	echo "[!] 필수 설정값이 비어있습니다: ${_config_file}" >&2
-	echo "    필수: interface, internet_interface, bssid, essid, channel, et_dos_attack" >&2
+	echo "[!] Required config values are missing in: ${_config_file}" >&2
+	echo "    Required: interface, internet_interface, bssid, essid, channel, et_dos_attack" >&2
 	exit 1
 fi
 
