@@ -5,33 +5,22 @@
 # Evil Twin Sniffing Attack - Standalone Script
 # Extracted from wfast.sh (airgeddon)
 # ============================================================
-# 필수 설정값을 아래 섹션에서 채워넣고 실행하세요.
-# ============================================================
 
-# --- 사용자 설정 (필수) ---
-interface="wlan0"          # AP로 사용할 무선 인터페이스
-internet_interface="eth0"  # 인터넷 연결 인터페이스
-phy_interface=""           # 물리 인터페이스 (비워두면 자동 감지)
-bssid="AA:BB:CC:DD:EE:FF"  # 타겟 BSSID
-essid="TargetNetwork"      # 타겟 ESSID
-channel="6"                # 타겟 채널
-et_dos_attack="Aireplay"   # DoS 공격 방식: mdk4 | Aireplay | "Auth DoS"
-mdk_command="mdk4"         # mdk3 또는 mdk4
+# --- 설정 파일 로드 ---
+_config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
+if [ ! -f "${_config_file}" ]; then
+	echo "[!] 설정 파일을 찾을 수 없습니다: ${_config_file}" >&2
+	exit 1
+fi
+# shellcheck source=et_config.conf
+source "${_config_file}"
 
-# --- 선택 설정 ---
-ettercap_log=1             # ettercap 로그 저장: 1=활성화
-ettercap_logpath="/tmp/et_sniffing_captured.txt"
-dos_pursuit_mode=0         # DoS Pursuit Mode: 1=활성화
-mac_spoofing_desired=0     # MAC 스푸핑: 1=활성화
-check_kill_needed=1        # NetworkManager 종료 필요 여부
-country_code="00"          # 국가 코드 (00=비지정)
-standard_80211n=0          # 802.11n 지원: 1=활성화
-standard_80211ac=0         # 802.11ac 지원
-standard_80211ax=0         # 802.11ax 지원
-standard_80211be=0         # 802.11be 지원
+# --- 내부 고정값 (설정 파일에서 건드리지 않는 값) ---
+mdk_command="mdk4"
+check_kill_needed=1
 interface_airmon_compatible=1
-et_initial_state="Monitor" # 시작 전 인터페이스 상태: Managed | Monitor
-ifacemode="Monitor"
+et_initial_state="Managed"
+ifacemode="Managed"
 right_arping=0
 right_arping_command="arping"
 able_to_play_sounds=0
@@ -86,6 +75,7 @@ wepdir="wepdir/"
 wep_besside_log="besside.log"
 aircrack_pot_tmp="aircrack.pot"
 
+dhcpd_pid_file="dhcpd.pid"
 beef_found=0
 beef_path=""
 enterprise_mode=""
@@ -1277,11 +1267,12 @@ function _et_cleanup() {
 	if [ "${dos_pursuit_mode}" -eq 1 ]; then
 		recover_current_channel
 	fi
+	clean_initialize_iptables_nftables "end"
 	restore_et_interface
 	if [ "${ettercap_log}" -eq 1 ]; then
 		parse_ettercap_log
 	fi
-	clean_tmpfiles
+	clean_tmpfiles "exit_script"
 	exit 0
 }
 
@@ -1314,7 +1305,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ -z "${interface}" ] || [ -z "${internet_interface}" ] || [ -z "${bssid}" ] || [ -z "${essid}" ] || [ -z "${channel}" ] || [ -z "${et_dos_attack}" ]; then
-	echo "[!] 필수 설정값이 비어있습니다. 스크립트 상단의 설정 섹션을 채워넣으세요." >&2
+	echo "[!] 필수 설정값이 비어있습니다: ${_config_file}" >&2
 	echo "    필수: interface, internet_interface, bssid, essid, channel, et_dos_attack" >&2
 	exit 1
 fi
