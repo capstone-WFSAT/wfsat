@@ -6,7 +6,7 @@
 # Extracted from wfast.sh (airgeddon)
 # ============================================================
 
-# --- 설정 파일 로드 ---
+# --- Load config file ---
 _config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
 if [ ! -f "${_config_file}" ]; then
 	echo "[!] Config file not found: ${_config_file}" >&2
@@ -15,7 +15,7 @@ fi
 # shellcheck source=et_config.conf
 source "${_config_file}"
 
-# --- 내부 고정값 (설정 파일에서 건드리지 않는 값) ---
+# --- Internal fixed values (do not modify via config file) ---
 mdk_command="mdk4"
 check_kill_needed=1
 interface_airmon_compatible=1
@@ -25,7 +25,7 @@ right_arping=0
 right_arping_command="arping"
 able_to_play_sounds=0
 
-# --- 내부 상수 ---
+# --- Internal constants ---
 et_mode="et_sniffing"
 AIRGEDDON_WINDOWS_HANDLING="${AIRGEDDON_WINDOWS_HANDLING:-xterm}"
 AIRGEDDON_DEBUG_MODE="${AIRGEDDON_DEBUG_MODE:-false}"
@@ -126,11 +126,11 @@ dos_pursuit_mode_scan_pid=""
 et_process_control_window=""
 enterprise_process_control_window=""
 
-# language_strings 스텁 (실제 출력 없음)
+# language_strings stub (no actual output)
 function language_strings() { :; }
 
 # ============================================================
-# 헬퍼 함수들
+# Helper functions
 # ============================================================
 
 function debug_print() {
@@ -1257,7 +1257,7 @@ function restore_et_interface() {
 }
 
 # ============================================================
-# 메인 함수
+# Main function
 # ============================================================
 
 function _et_cleanup() {
@@ -1296,7 +1296,7 @@ function exec_et_sniffing_attack() {
 }
 
 # ============================================================
-# 실행 전 검증
+# Pre-run validation
 # ============================================================
 
 if [ "$(id -u)" -ne 0 ]; then
