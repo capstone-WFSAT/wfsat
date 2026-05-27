@@ -87,10 +87,10 @@ hostapd_wifi7_version="2.11"
 hostapd_version=""
 
 standard_resolution="1920x1080"
-xratio=1
-yratio=1
-ywindow_edge_lines=5
-ywindow_edge_pixels=25
+xratio=6.2
+yratio=13.9
+ywindow_edge_lines=2
+ywindow_edge_pixels=18
 
 iptables_nftables=0
 iptables_cmd="iptables"
@@ -132,6 +132,48 @@ function language_strings() { :; }
 # ============================================================
 # Helper functions
 # ============================================================
+
+function detect_distro_window_ratios() {
+	debug_print
+	local distro_id=""
+	if [ -f /etc/os-release ]; then
+		distro_id=$(grep -oP '^ID=\K.*' /etc/os-release | tr -d '"' | tr '[:upper:]' '[:lower:]')
+	fi
+	case "${distro_id}" in
+		"wifislax")
+			xratio=7;   yratio=15.1; ywindow_edge_lines=1; ywindow_edge_pixels=-14 ;;
+		"backbox")
+			xratio=6;   yratio=14.2; ywindow_edge_lines=1; ywindow_edge_pixels=15  ;;
+		"ubuntu"|"linuxmint")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+		"kali")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+		"debian")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=14  ;;
+		"opensuse"|"opensuse-leap"|"opensuse-tumbleweed")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+		"centos")
+			xratio=6.2; yratio=14.9; ywindow_edge_lines=2; ywindow_edge_pixels=10  ;;
+		"parrot")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=10  ;;
+		"arch"|"cachyos")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=16  ;;
+		"fedora")
+			xratio=6;   yratio=14.1; ywindow_edge_lines=2; ywindow_edge_pixels=16  ;;
+		"gentoo"|"pentoo")
+			xratio=6.2; yratio=14.6; ywindow_edge_lines=1; ywindow_edge_pixels=-10 ;;
+		"rhel")
+			xratio=6.2; yratio=15.3; ywindow_edge_lines=1; ywindow_edge_pixels=10  ;;
+		"blackarch")
+			xratio=8;   yratio=18;   ywindow_edge_lines=1; ywindow_edge_pixels=1   ;;
+		"raspbian")
+			xratio=6.2; yratio=14;   ywindow_edge_lines=1; ywindow_edge_pixels=20  ;;
+		"openmandriva")
+			xratio=6.2; yratio=14;   ywindow_edge_lines=2; ywindow_edge_pixels=-10 ;;
+		*)
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+	esac
+}
 
 function debug_print() {
 	if "${AIRGEDDON_DEBUG_MODE:-false}"; then
@@ -1323,6 +1365,8 @@ fi
 if [ -z "${phy_interface}" ]; then
 	phy_interface=$(physical_interface_finder "${interface}")
 fi
+
+detect_distro_window_ratios
 
 mkdir -p "${tmpdir}"
 echo "${agpid_to_use}" > "${system_tmpdir}${ag_orchestrator_file}"
