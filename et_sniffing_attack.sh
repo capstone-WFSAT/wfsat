@@ -265,6 +265,7 @@ function prepare_et_monitor() {
 	iw dev "${interface}" set channel "${channel}" > /dev/null 2>&1
 	iw phy "${phy_interface}" interface add "${iface_monitor_et_deauth}" type monitor 2> /dev/null
 	ip link set "${iface_monitor_et_deauth}" up > /dev/null 2>&1
+	iw dev "${iface_monitor_et_deauth}" set channel "${channel}" > /dev/null 2>&1
 }
 
 function set_spoofed_mac() {
