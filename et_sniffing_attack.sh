@@ -13,7 +13,10 @@ if [ ! -f "${_config_file}" ]; then
 	exit 1
 fi
 # shellcheck source=et_config.conf
-source "${_config_file}"
+# Windows에서 편집된 파일은 줄 끝이 \r\n(CRLF)으로 저장됨.
+# 그냥 source하면 변수 값에 \r이 포함되어 iw 등 명령이 실패함.
+# tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
+source <(tr -d '\r' < "${_config_file}")
 
 # --- Internal fixed values (do not modify via config file) ---
 mdk_command="mdk4"
