@@ -18,6 +18,9 @@ fi
 # tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
 source <(tr -d '\r' < "${_config_file}")
 
+# --- 이 스크립트 고유의 DoS 방식 (config 값을 덮어씀) ---
+et_dos_attack="Aireplay"
+
 # --- 내부 고정값 (설정 파일로 수정 불가) ---
 mdk_command="mdk4"
 check_kill_needed=1
@@ -1393,9 +1396,10 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
-if [ -z "${interface}" ] || [ -z "${internet_interface}" ] || [ -z "${bssid}" ] || [ -z "${essid}" ] || [ -z "${channel}" ] || [ -z "${et_dos_attack}" ]; then
+if [ -z "${interface}" ] || [ -z "${internet_interface}" ] || [ -z "${bssid}" ] || [ -z "${essid}" ] || [ -z "${channel}" ]; then
 	echo "[!] Required config values are missing in: ${_config_file}" >&2
-	echo "    Required: interface, internet_interface, bssid, essid, channel, et_dos_attack" >&2
+	echo "    Required: interface, internet_interface, bssid, essid, channel" >&2
+	echo "    (Run et_scan.sh first to auto-fill these values)" >&2
 	exit 1
 fi
 

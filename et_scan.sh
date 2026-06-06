@@ -319,6 +319,20 @@ update_config_value "channel"        "${sel_channel}"
 update_config_value "phy_interface"  "${phy_interface}"
 
 echo "[+] Config updated successfully."
+
+# ============================================================
+# 인터넷 인터페이스 자동 감지 (기본 라우트 기준)
+# ============================================================
+echo
+echo "[*] Detecting internet interface..."
+_inet_iface=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
+if [ -n "${_inet_iface}" ] && [ "${_inet_iface}" != "${interface}" ]; then
+    update_config_value "internet_interface" "${_inet_iface}"
+    echo "[+] Internet interface saved: ${_inet_iface}"
+else
+    echo "[!] Could not auto-detect internet interface. Set manually in et_config.conf."
+fi
+
 echo
 echo "    Run  sudo ./et_sniffing_attack.sh  to start the attack."
 
