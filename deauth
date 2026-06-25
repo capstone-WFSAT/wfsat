@@ -89,8 +89,6 @@ ywindow_edge_pixels=18
 # set_xsizes()
 # set_ypositions()
 # set_ysizes()
-# ========================
-# (추가: 독립 실행을 위해 보강된 함수)
 # physical_interface_finder()
 # check_interface_supported_bands()
 # get_5ghz_band_info_from_phy_interface()
@@ -847,11 +845,6 @@ function set_ysizes() {
 	ywindowthird=$((ytotal / 3 - ywindow_edge_lines))
 	ywindowseventh=$((ytotal / 7 - ywindow_edge_lines))
 }
-
-# ============================================================
-# 독립 실행을 위해 추가된 보조 함수
-# (조원의 et_sniffing_attack.sh와 동일한 패턴)
-# ============================================================
 
 # sysfs symlink을 읽어 네트워크 인터페이스($1)에 대응하는 물리 phy 번호(예: phy0)를 반환
 function physical_interface_finder() {
