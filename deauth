@@ -543,9 +543,6 @@ function debug_print() {
 	return 0
 }
 
-# language_strings()는 airgeddon 본체의 다국어 출력 함수를 호출하는 용도였으나,
-# 단독 실행 스크립트에는 본체가 없으므로 빈 스텁으로 동작시켜 에러 없이 무시되게 한다.
-# (메시지 테이블 자체는 원본 구조를 보존하기 위해 그대로 남겨둠)
 function language_strings() { :; }
 
 function language_strings_handling_messages() {
