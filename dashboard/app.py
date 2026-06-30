@@ -165,6 +165,10 @@ with col_pie:
     st.markdown("**AP별 초당 패킷 처리량 비중**")
     pie_df = pd.DataFrame(AP_ROWS)
     pie_df["label"] = pie_df["ssid"] + " (" + pie_df["bssid"].str[-5:] + ")"
+    pie_df["share"] = pie_df["pkt_rate"] / pie_df["pkt_rate"].sum()
+    pie_df["slice_text"] = pie_df.apply(
+        lambda r: r["label"] if r["share"] >= 0.5 else "", axis=1
+    )
     fig = px.pie(
         pie_df,
         names="label",
@@ -173,7 +177,12 @@ with col_pie:
         color_discrete_map={"정상": "#5cb85c", "의심": "#f0ad4e", "공격중": "#d9534f"},
         hole=0.35,
     )
-    fig.update_traces(textinfo="percent+label", textposition="outside")
+    fig.update_traces(
+        text=pie_df["slice_text"],
+        textinfo="text",
+        textposition="inside",
+        hovertemplate="<b>%{label}</b><br>패킷/s: %{value}<br>비중: %{percent}<extra></extra>",
+    )
     fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10), height=320)
     st.plotly_chart(fig, use_container_width=True)
 
