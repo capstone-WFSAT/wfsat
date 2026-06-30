@@ -46,12 +46,6 @@ def make_log_rows(n=18):
 
 LOG_DF = make_log_rows()
 
-ACTION_HISTORY = pd.DataFrame([
-    {"시간": "21:42:10", "공격 유형": "Deauth Flood", "조치": "채널 회피", "결과": "완료"},
-    {"시간": "21:38:55", "공격 유형": "Evil Twin", "조치": "경고만", "결과": "완료"},
-    {"시간": "21:20:03", "공격 유형": "Deauth Flood", "조치": "역으로 Deauth 전송", "결과": "완료"},
-])
-
 GUIDE_TEXT = {
     "Deauth Flood": """
 **탐지 근거**: 동일 BSSID에서 reason code 7 deauth 프레임이 짧은 시간 내 비정상적으로 다수 발생.
@@ -101,7 +95,6 @@ with st.sidebar:
     st.caption("Wireless Frame Security Analysis Tool")
     st.divider()
     st.subheader("⚙️ 시스템 / 설정")
-    st.toggle("자동 대응 활성화", value=True, key="auto_response")
     st.selectbox("로그 표시 개수", [10, 20, 50, 100], index=1, key="log_limit")
     st.divider()
     st.subheader("📤 내보내기")
@@ -109,13 +102,6 @@ with st.sidebar:
         "탐지 로그 CSV 내보내기",
         data=LOG_DF.to_csv(index=False).encode("utf-8-sig"),
         file_name="wfsat_detection_log.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
-    st.download_button(
-        "대응 히스토리 CSV 내보내기",
-        data=ACTION_HISTORY.to_csv(index=False).encode("utf-8-sig"),
-        file_name="wfsat_action_history.csv",
         mime="text/csv",
         use_container_width=True,
     )
@@ -244,24 +230,7 @@ with col_b:
 st.divider()
 
 # ---------------------------------------------------------------------------
-# 5. 대응 액션
-# ---------------------------------------------------------------------------
-
-st.subheader("🛡️ 대응 액션")
-
-col1, col2, col3, col4 = st.columns(4)
-col1.button("채널 회피", use_container_width=True)
-col2.button("역으로 Deauth 전송", use_container_width=True)
-col3.button("경고만 표시", use_container_width=True)
-col4.toggle("자동 대응 ON/OFF", value=True, key="auto_response_main")
-
-st.markdown("**대응 실행 히스토리**")
-st.dataframe(ACTION_HISTORY, use_container_width=True, hide_index=True)
-
-st.divider()
-
-# ---------------------------------------------------------------------------
-# 6. 대처 가이드 문서
+# 5. 대처 가이드 문서
 # ---------------------------------------------------------------------------
 
 st.subheader("📘 대처 가이드 문서")
@@ -279,7 +248,7 @@ with st.expander("일반 보안 강화 권장사항"):
 st.divider()
 
 # ---------------------------------------------------------------------------
-# 7. 연구 / 통계 패널
+# 6. 연구 / 통계 패널
 # ---------------------------------------------------------------------------
 
 st.subheader("📊 연구 / 통계 패널")
