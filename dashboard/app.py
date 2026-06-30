@@ -6,6 +6,7 @@ import datetime as dt
 import random
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 st.set_page_config(page_title="WFSAT Dashboard", layout="wide", initial_sidebar_state="expanded")
@@ -17,12 +18,12 @@ st.set_page_config(page_title="WFSAT Dashboard", layout="wide", initial_sidebar_
 ATTACK_TYPES = ["Deauth Flood", "Evil Twin", "Beacon Flood", "ARP Spoofing", "KARMA Attack"]
 
 AP_ROWS = [
-    {"ssid": "HomeWiFi_5G", "bssid": "AA:11:22:33:44:01", "channel": 6, "rssi": -42, "enc": "WPA2", "status": "정상"},
-    {"ssid": "HomeWiFi_5G", "bssid": "AA:11:22:33:44:99", "channel": 6, "rssi": -38, "enc": "OPEN", "status": "의심"},
-    {"ssid": "CafeFreeNet", "bssid": "BB:22:33:44:55:02", "channel": 11, "rssi": -55, "enc": "WPA2", "status": "정상"},
-    {"ssid": "OfficeAP", "bssid": "CC:33:44:55:66:03", "channel": 1, "rssi": -61, "enc": "WPA3", "status": "정상"},
-    {"ssid": "OfficeAP", "bssid": "CC:33:44:55:66:E1", "channel": 1, "rssi": -33, "enc": "WPA2", "status": "공격중"},
-    {"ssid": "Guest_Lobby", "bssid": "DD:44:55:66:77:04", "channel": 3, "rssi": -70, "enc": "WPA2", "status": "정상"},
+    {"ssid": "HomeWiFi_5G", "bssid": "AA:11:22:33:44:01", "channel": 6, "rssi": -42, "enc": "WPA2", "status": "정상", "pkt_rate": 210},
+    {"ssid": "HomeWiFi_5G", "bssid": "AA:11:22:33:44:99", "channel": 6, "rssi": -38, "enc": "OPEN", "status": "의심", "pkt_rate": 95},
+    {"ssid": "CafeFreeNet", "bssid": "BB:22:33:44:55:02", "channel": 11, "rssi": -55, "enc": "WPA2", "status": "정상", "pkt_rate": 140},
+    {"ssid": "OfficeAP", "bssid": "CC:33:44:55:66:03", "channel": 1, "rssi": -61, "enc": "WPA3", "status": "정상", "pkt_rate": 88},
+    {"ssid": "OfficeAP", "bssid": "CC:33:44:55:66:E1", "channel": 1, "rssi": -33, "enc": "WPA2", "status": "공격중", "pkt_rate": 612},
+    {"ssid": "Guest_Lobby", "bssid": "DD:44:55:66:77:04", "channel": 3, "rssi": -70, "enc": "WPA2", "status": "정상", "pkt_rate": 47},
 ]
 
 STATUS_COLOR = {"정상": "#d4edda", "의심": "#fff3cd", "공격중": "#f8d7da"}
@@ -142,7 +143,7 @@ st.subheader("📶 AP / 네트워크 현황")
 
 ap_df = pd.DataFrame(AP_ROWS).rename(columns={
     "ssid": "SSID", "bssid": "BSSID", "channel": "채널",
-    "rssi": "RSSI(dBm)", "enc": "암호화", "status": "상태",
+    "rssi": "RSSI(dBm)", "enc": "암호화", "status": "상태", "pkt_rate": "패킷/s",
 })
 
 
@@ -151,11 +152,30 @@ def highlight_status(row):
     return [f"background-color: {color}"] * len(row)
 
 
-st.dataframe(
-    ap_df.style.apply(highlight_status, axis=1),
-    use_container_width=True,
-    hide_index=True,
-)
+col_table, col_pie = st.columns([2, 1])
+
+with col_table:
+    st.dataframe(
+        ap_df.style.apply(highlight_status, axis=1),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+with col_pie:
+    st.markdown("**AP별 초당 패킷 처리량 비중**")
+    pie_df = pd.DataFrame(AP_ROWS)
+    pie_df["label"] = pie_df["ssid"] + " (" + pie_df["bssid"].str[-5:] + ")"
+    fig = px.pie(
+        pie_df,
+        names="label",
+        values="pkt_rate",
+        color="status",
+        color_discrete_map={"정상": "#5cb85c", "의심": "#f0ad4e", "공격중": "#d9534f"},
+        hole=0.35,
+    )
+    fig.update_traces(textinfo="percent+label", textposition="outside")
+    fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10), height=320)
+    st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
