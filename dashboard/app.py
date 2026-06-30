@@ -5,6 +5,7 @@ Run: streamlit run dashboard/app.py
 import datetime as dt
 import random
 
+import altair as alt
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -223,8 +224,18 @@ with col_b:
     timeline_df = pd.DataFrame({
         "t": list(range(20)),
         "deauth_frames": [random.randint(0, 3) for _ in range(10)] + [random.randint(15, 40) for _ in range(10)],
-    }).set_index("t")
-    st.line_chart(timeline_df, height=260)
+    })
+    timeline_chart = (
+        alt.Chart(timeline_df)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("t:Q", title="t (초)"),
+            y=alt.Y("deauth_frames:Q", title="deauth_frames", scale=alt.Scale(domainMin=0)),
+        )
+        .properties(height=260)
+        .interactive()
+    )
+    st.altair_chart(timeline_chart, use_container_width=True)
     st.caption("초 단위 deauth 프레임 수 — 10초 시점부터 급증 (공격 시작 추정 구간)")
 
 st.divider()
