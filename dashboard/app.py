@@ -124,11 +124,11 @@ c5.metric("인터페이스 2 (캡처)", "정상", "wlan1mon")
 st.divider()
 
 # ---------------------------------------------------------------------------
-# 탭 구성: 공격 시나리오 / 모니터링·대응 / 대응 이력 / 통계·연구
+# 탭 구성: 공격 시나리오 / 모니터링·대응 / 대응 이력
 # ---------------------------------------------------------------------------
 
-tab_scenario, tab_monitor, tab_history, tab_stats = st.tabs(
-    ["공격 시나리오", "모니터링·대응", "대응 이력", "통계·연구"]
+tab_scenario, tab_monitor, tab_history = st.tabs(
+    ["공격 시나리오", "모니터링·대응", "대응 이력"]
 )
 
 # ---------------------------------------------------------------------------
@@ -292,58 +292,3 @@ with tab_history:
     # else:
     #     대응 이력을 "공격 유형" == selected_attack_type 기준으로 필터링해서 표시
     st.info("대응 이력 (구현 예정)")
-
-# ---------------------------------------------------------------------------
-# 탭 4. 통계·연구
-# [이전: ⑥연구 / 통계 패널 섹션 전부 이 탭으로 이동]
-# ---------------------------------------------------------------------------
-
-with tab_stats:
-    st.subheader("📊 연구 / 통계 패널")
-
-    t1, t2, t3 = st.tabs(["오탐 검증", "탐지 성공 케이스", "시간대별 공격 빈도"])
-
-    with t1:
-        # [이전: 오탐 검증 서브탭 - 변경 없음]
-        fp_df = pd.DataFrame([
-            {"테스트 시나리오": "공격 패턴 (Deauth Flood)", "샘플 수": 200, "정탐": 196, "오탐": 4, "정확도": "98.0%"},
-            {"테스트 시나리오": "정상 멀티 AP 환경 (메시 네트워크)", "샘플 수": 150, "정탐(정상 판정)": 147, "오탐(공격 오판)": 3, "정확도": "98.0%"},
-            {"테스트 시나리오": "정상 핸드오버(로밍)", "샘플 수": 120, "정탐(정상 판정)": 118, "오탐(공격 오판)": 2, "정확도": "98.3%"},
-        ])
-        st.dataframe(fp_df, use_container_width=True, hide_index=True)
-
-    with t2:
-        # [이전: 탐지 성공 케이스 서브탭 - st.bar_chart -> Altair로 변경하여
-        #  selected_attack_type 막대를 강조 색상으로 표시]
-        success_df = pd.DataFrame({
-            "공격 유형": ATTACK_TYPES,
-            "탐지 성공": [42, 18, 25, 11, 9],
-        })
-        success_df["강조"] = success_df["공격 유형"].apply(
-            lambda a: "선택됨" if selected_attack_type != "전체" and a == selected_attack_type else "일반"
-        )
-        success_chart = (
-            alt.Chart(success_df)
-            .mark_bar()
-            .encode(
-                x=alt.X("공격 유형:N", sort=None, title="공격 유형"),
-                y=alt.Y("탐지 성공:Q"),
-                color=alt.Color(
-                    "강조:N",
-                    scale=alt.Scale(domain=["일반", "선택됨"], range=["#4c78a8", "#d62728"]),
-                    legend=None,
-                ),
-            )
-            .properties(height=300)
-        )
-        st.altair_chart(success_chart, use_container_width=True)
-
-    with t3:
-        # [이전: 시간대별 공격 빈도 서브탭 - 변경 없음]
-        hour_df = pd.DataFrame({
-            "시간대": [f"{h:02d}시" for h in range(24)],
-            "공격 빈도": [random.randint(0, 5) if h < 7 or h > 22 else random.randint(2, 15) for h in range(24)],
-        }).set_index("시간대")
-        st.line_chart(hour_df, height=300)
-
-    st.caption("ℹ️ 본 패널의 데이터는 화면 레이아웃 확인용 더미 데이터입니다.")
