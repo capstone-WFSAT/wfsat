@@ -32,3 +32,23 @@ sudo ./et_sniffing_attack.sh
 pip install -r dashboard/requirements.txt
 streamlit run dashboard/app.py
 ```
+
+
+
+# 1. venv 모듈이 없으면 먼저 설치
+sudo apt install python3 python3-venv -y
+
+# 2. 프로젝트 폴더에 가상환경 생성 (.venv 디렉토리 생성됨)
+python3 -m venv .venv
+
+# 3. 가상환경 활성화 (프롬프트 앞에 (.venv) 표시됨)
+source .venv/bin/activate
+
+# 4. 가상환경 안의 pip로 패키지 설치 (sudo 붙이지 말 것)
+pip install -r dashboard/requirements.txt
+
+# 5. 대시보드 실행
+streamlit run dashboard/app.py
+
+# 6. 끝나면 가상환경 비활성화
+deactivate
