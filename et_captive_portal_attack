@@ -130,8 +130,11 @@ mac_spoofing_desired=0
 et_process_control_window=""
 enterprise_process_control_window=""
 
-function language_strings() { :; }
-
+function language_strings() {
+    if [ "${3}" = "read" ]; then
+        read -r -p "Press Enter to stop..." _
+    fi
+}
 function language_strings_handling_messages() {
 	declare -gA language_strings_no_file
 	language_strings_no_file["ENGLISH"]="Error. Language strings file not found"
