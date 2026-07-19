@@ -1,0 +1,8 @@
+# 생성물 (분석 산출물 / 테스트 캡처 / 캐시)
+output/
+*.pcap
+*.pcapng
+*.cap
+sample.pcap
+__pycache__/
+*.pyc
