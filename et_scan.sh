@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
-# et_scan.sh - 주변 AP를 스캔하고 선택 결과를
-#              et_config.conf에 저장, et_sniffing_attack.sh에서 사용
+# et_scan.sh - Scan for nearby APs and save selection to
+#              et_config.conf, ready for et_sniffing_attack.sh
 # ============================================================
 
-# --- 설정 파일 로드 ---
+# --- Load config ---
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _config_file="${_script_dir}/et_config.conf"
 
@@ -18,21 +18,21 @@ fi
 # tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
 source <(tr -d '\r' < "${_config_file}")
 
-# --- 루트 권한 확인 ---
+# --- Root check ---
 if [ "$(id -u)" -ne 0 ]; then
     echo "[!] Root privileges required. Run with sudo." >&2
     exit 1
 fi
 
-# --- 설정 기본값 ---
+# --- Config defaults ---
 scan_duration="${SCAN_DURATION:-15}"
 tmpdir="/tmp/et_scan_$$/"
 mkdir -p "${tmpdir}"
 airodump_pid=""
 
 # ============================================================
-# 헬퍼: awk를 이용해 et_config.conf에 값을 다시 씀
-# 특수 문자(따옴표, 슬래시 등)가 포함된 ESSID에도 안전
+# Helper: write a value back into et_config.conf via awk
+# Safe for ESSIDs with special characters (quotes, slashes, etc.)
 # ============================================================
 function update_config_value() {
     local key="$1"
@@ -45,10 +45,10 @@ function update_config_value() {
 }
 
 # ============================================================
-# 정리: 인터페이스를 managed 모드로 복원
+# Cleanup: restore interface to managed mode
 # ============================================================
 function _scan_cleanup() {
-    # airodump-ng가 실행 중이면 종료
+    # Kill airodump-ng if still running
     if [ -n "${airodump_pid}" ] && kill -0 "${airodump_pid}" 2>/dev/null; then
         kill "${airodump_pid}" > /dev/null 2>&1
         wait "${airodump_pid}" 2>/dev/null
@@ -68,7 +68,7 @@ trap '_scan_cleanup' EXIT
 # WiFi 어댑터 선택
 # ============================================================
 if [ -z "${interface}" ]; then
-    echo "[*] Available WiFi interfaces:"
+    echo "[*] 사용 가능한 WiFi 인터페이스 목록:"
     echo
 
     # /sys/class/net 에서 wireless 디렉토리가 있는 인터페이스만 추출
@@ -84,30 +84,30 @@ if [ -z "${interface}" ]; then
     done
 
     if [ "${j}" -eq 0 ]; then
-        echo "[!] No WiFi interfaces found." >&2
+        echo "[!] WiFi 인터페이스를 찾을 수 없습니다." >&2
         exit 1
     fi
 
     echo
     if [ "${j}" -eq 1 ]; then
-        echo "[*] Only one interface found — auto-selecting: ${_ifaces[1]}"
+        echo "[*] 인터페이스가 하나뿐이라 자동 선택합니다: ${_ifaces[1]}"
         interface="${_ifaces[1]}"
     else
-        printf "[?] Select interface number (1-%d): " "${j}"
+        printf "[?] 인터페이스 번호 선택 (1-%d): " "${j}"
         read -r _sel_iface
         while [[ ! "${_sel_iface}" =~ ^[0-9]+$ ]] || \
               [ "${_sel_iface}" -lt 1 ] || [ "${_sel_iface}" -gt "${j}" ]; do
-            echo "[!] Invalid input. Enter a number between 1 and ${j}."
-            printf "[?] Select interface number (1-%d): " "${j}"
+            echo "[!] 잘못된 입력입니다. 1~${j} 사이의 숫자를 입력하세요."
+            printf "[?] 인터페이스 번호 선택 (1-%d): " "${j}"
             read -r _sel_iface
         done
         interface="${_ifaces[${_sel_iface}]}"
     fi
 
-    echo "[*] Selected interface: ${interface}"
+    echo "[*] 선택된 인터페이스: ${interface}"
     # 선택한 인터페이스를 et_config.conf에 저장
     update_config_value "interface" "${interface}"
-    echo "[+] Interface saved to et_config.conf."
+    echo "[+] et_config.conf에 interface 저장 완료."
     echo
 fi
 
@@ -117,8 +117,8 @@ fi
 if [ -z "${phy_interface}" ]; then
     phy_num=$(iw dev "${interface}" info 2>/dev/null | awk '/wiphy/{print $2}')
     if [ -z "${phy_num}" ]; then
-        echo "[!] Cannot detect physical interface (wiphy) for '${interface}'." >&2
-        echo "    Verify that '${interface}' is an actual WiFi adapter." >&2
+        echo "[!] '${interface}'의 물리 인터페이스(wiphy)를 감지할 수 없습니다." >&2
+        echo "    '${interface}'이 실제로 존재하는 WiFi 어댑터인지 확인하세요." >&2
         exit 1
     fi
     phy_interface="phy${phy_num}"
@@ -126,11 +126,11 @@ fi
 echo "[*] Physical interface : ${phy_interface}"
 
 # ============================================================
-# 모니터 모드 활성화
+# Enable monitor mode
 # ============================================================
 echo "[*] Enabling monitor mode on ${interface}..."
 
-# 간섭 프로세스 종료 (NetworkManager, wpa_supplicant)
+# Kill processes that may interfere (NetworkManager, wpa_supplicant)
 airmon-ng check kill > /dev/null 2>&1
 
 ip link set "${interface}" down > /dev/null 2>&1
@@ -146,7 +146,7 @@ fi
 echo "[+] Monitor mode enabled."
 
 # ============================================================
-# airodump-ng 스캔 실행
+# Run airodump-ng scan
 # ============================================================
 echo "[*] Scanning for APs (${scan_duration}s)..."
 rm -f "${tmpdir}nws"*
@@ -172,7 +172,7 @@ airodump_pid=""
 echo "[+] Scan complete."
 
 # ============================================================
-# CSV 출력 파싱
+# Parse CSV output
 # ============================================================
 if [ ! -f "${tmpdir}nws-01.csv" ]; then
     echo "[!] No scan data was collected." >&2
@@ -180,7 +180,7 @@ if [ ! -f "${tmpdir}nws-01.csv" ]; then
     exit 1
 fi
 
-# AP 섹션이 끝나는 위치 찾기 ("Station MAC" 헤더 바로 앞 줄)
+# Find where the AP section ends (the line before "Station MAC" header)
 _station_line=$(awk '/^[[:space:]]*(Station[s]?|Client[es]?)/{print NR; exit}' \
     "${tmpdir}nws-01.csv" 2>/dev/null)
 
@@ -190,7 +190,7 @@ else
     cp "${tmpdir}nws-01.csv" "${tmpdir}nws.csv"
 fi
 
-# CSV 필드 위치 (1부터 시작, 콤마 구분):
+# CSV field positions (1-indexed, comma-separated):
 #  1=BSSID  2=FirstSeen  3=LastSeen  4=Channel  5=Speed  6=Privacy
 #  7=Cipher  8=Auth  9=Power  10=Beacons  11=IVs  12=LAN_IP
 #  13=ID-length  14=ESSID  15=Key
@@ -200,11 +200,11 @@ rm -f "${tmpdir}nws.txt"
 while IFS=, read -r exp_mac _ _ exp_channel _ exp_enc _ exp_auth exp_power \
                     _ _ _ exp_idlength exp_essid _; do
 
-    # 헤더/빈 줄 건너뜀 — 유효한 BSSID는 정확히 17자 (XX:XX:XX:XX:XX:XX)
+    # Skip header/blank lines — valid BSSIDs are exactly 17 chars (XX:XX:XX:XX:XX:XX)
     exp_mac="${exp_mac// /}"
     [ "${#exp_mac}" -lt 17 ] && continue
 
-    # 신호 세기 정규화: airodump는 음수 dBm으로 보고, 0~100%로 변환
+    # Normalize signal power: airodump reports negative dBm, convert to 0-100%
     exp_power="${exp_power// /}"
     if [[ "${exp_power}" =~ ^-[0-9]+$ ]]; then
         if [ "${exp_power}" -eq -1 ]; then
@@ -216,19 +216,19 @@ while IFS=, read -r exp_mac _ _ exp_channel _ exp_enc _ exp_auth exp_power \
     fi
     [[ ! "${exp_power}" =~ ^[0-9]+$ ]] && exp_power=0
 
-    # ID-length 필드로 ESSID 추출 (airodump가 추가한 앞쪽 공백 제거)
+    # Extract ESSID using the ID-length field (strips leading space added by airodump)
     exp_idlength="${exp_idlength// /}"
     exp_essid="${exp_essid:1:${exp_idlength}}"
 
-    # 채널 정규화
+    # Normalize channel
     exp_channel="${exp_channel// /}"
     [[ ! "${exp_channel}" =~ ^-?[0-9]+$ ]] && exp_channel=0
     [ "${exp_channel}" = "-1" ] && exp_channel=0
 
-    # 숨겨진 네트워크 표시
+    # Label hidden networks
     [ -z "${exp_essid}" ] && exp_essid="(Hidden Network)"
 
-    # ENC/auth 필드 공백 제거
+    # Trim whitespace from ENC/auth fields
     exp_enc=$(echo "${exp_enc}" | awk '{print $1}')
     exp_auth="${exp_auth// /}"
 
@@ -244,11 +244,11 @@ if [ ! -s "${tmpdir}nws.txt" ]; then
     exit 1
 fi
 
-# 신호 세기 기준 정렬 — 신호가 강한 AP 우선 (3번째 필드 내림차순)
+# Sort by signal strength — strongest AP first (numeric descending on field 3)
 sort -t "," -k 3 -rn "${tmpdir}nws.txt" > "${tmpdir}wnws.txt"
 
 # ============================================================
-# AP 목록 출력
+# Display AP list
 # ============================================================
 echo
 printf '%0.s=' {1..80}; echo
@@ -281,7 +281,7 @@ if [ "${i}" -eq 0 ]; then
 fi
 
 # ============================================================
-# 사용자 선택
+# User selection
 # ============================================================
 if [ "${i}" -eq 1 ]; then
     echo "[*] Only one AP found — selecting automatically."
@@ -309,7 +309,7 @@ echo "    Channel : ${sel_channel}"
 echo "    phy     : ${phy_interface}"
 
 # ============================================================
-# et_config.conf에 값 저장
+# Save values to et_config.conf
 # ============================================================
 echo
 echo "[*] Updating ${_config_file}..."
@@ -319,22 +319,8 @@ update_config_value "channel"        "${sel_channel}"
 update_config_value "phy_interface"  "${phy_interface}"
 
 echo "[+] Config updated successfully."
-
-# ============================================================
-# 인터넷 인터페이스 자동 감지 (기본 라우트 기준)
-# ============================================================
-echo
-echo "[*] Detecting internet interface..."
-_inet_iface=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
-if [ -n "${_inet_iface}" ] && [ "${_inet_iface}" != "${interface}" ]; then
-    update_config_value "internet_interface" "${_inet_iface}"
-    echo "[+] Internet interface saved: ${_inet_iface}"
-else
-    echo "[!] Could not auto-detect internet interface. Set manually in et_config.conf."
-fi
-
 echo
 echo "    Run  sudo ./et_sniffing_attack.sh  to start the attack."
 
-# EXIT 트랩이 자동으로 인터페이스를 복원하고 tmpdir을 정리함
+# EXIT trap will restore the interface and clean up tmpdir automatically
 exit 0
