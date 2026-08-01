@@ -2327,7 +2327,6 @@ echo "[*] Interface band: ${interfaces_band_info[main_wifi_interface,text]}"
 
 mkdir -p "${tmpdir}"
 echo "${agpid_to_use}" > "${system_tmpdir}${ag_orchestrator_file}"
-trap '_et_sniffing_cleanup' SIGINT SIGTERM
 echo
 
 exec_et_sniffing_attack
