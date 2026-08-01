@@ -13,6 +13,21 @@ if [ ! -f "${_config_file}" ]; then
 fi
 source <(tr -d '\r' < "${_config_file}")
 
+# --- 최소 스텁 (language_strings 대체) ---
+language="ENGLISH"
+
+function language_strings() {
+	local idx="$2"
+	local color="$3"
+	case "${idx}" in
+		298) echo "[*] Evil Twin sniffing attack launched." ;;
+		115) read -rp "Press [Enter] to continue..." ;;
+		*) : ;;
+	esac
+}
+
+declare -A disabled_text=( ["ENGLISH"]="disabled" )
+
 et_dos_attack="${et_dos_attack:-Aireplay}"
 dos_pursuit_mode="${dos_pursuit_mode:-0}"
 
