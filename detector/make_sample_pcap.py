@@ -81,7 +81,7 @@ def main():
             "dd:44:55:66:77:04", b"Guest_Lobby", 3, -70, encrypted=False))
 
     wrpcap(out, frames)
-    print(f"[+] 합성 pcap 생성: {out}  (frames={len(frames)})")
+    print(f"[+] sample pcap created: {out}  (frames={len(frames)})")
 
 
 if __name__ == "__main__":

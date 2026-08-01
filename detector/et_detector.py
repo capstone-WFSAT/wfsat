@@ -49,7 +49,7 @@ try:
     )
 except ImportError:
     sys.stderr.write(
-        "[!] scapy 가 필요합니다.  pip install -r requirements.txt  로 설치하세요.\n"
+        "[!] scapy is required.  Run: pip install -r requirements.txt\n"
     )
     sys.exit(2)
 
@@ -290,7 +290,7 @@ def apply_signals(aps: dict) -> None:
         if zw:
             ap.s1_zero_width = True
             ap.zero_width_found = zw
-            ap.reasons.append(f"S1: ESSID 에 zero-width 문자 {', '.join(zw)} 포함")
+            ap.reasons.append(f"S1: zero-width character(s) in ESSID: {', '.join(zw)}")
 
     for name, members in groups.items():
         if len(members) < 2:
@@ -310,14 +310,14 @@ def apply_signals(aps: dict) -> None:
                         ap.twin_of.append(other.bssid)
             if ap.s2_twin_bssid and ap.twin_of:
                 ap.reasons.append(
-                    f"S2: 쌍둥이 BSSID({', '.join(ap.twin_of)}) — 1 nibble 차이"
+                    f"S2: twin BSSID detected ({', '.join(ap.twin_of)}) — 1 nibble difference"
                 )
 
             # --- S3: 암호화 다운그레이드 (같은 이름의 암호화 AP 가 있는데 본인은 OPEN) ---
             if ap.enc == "OPEN" and encrypted:
                 ap.s3_downgrade = True
                 peers = ", ".join(f"{e.bssid}={e.enc}" for e in encrypted)
-                ap.reasons.append(f"S3: 동일 ESSID 암호화 다운그레이드 (OPEN vs {peers})")
+                ap.reasons.append(f"S3: encryption downgrade on same ESSID (OPEN vs {peers})")
 
 
 # ------------------------------------------------------------
@@ -396,10 +396,10 @@ def build_findings(aps: dict) -> list:
 
 def print_report(aps: dict, findings: list) -> None:
     print("\n" + "=" * 64)
-    print(" WFSAT Evil Twin 오프라인 분석 리포트 (P0)")
+    print(" WFSAT Evil Twin Offline Analysis Report (P0)")
     print("=" * 64)
-    print(f" 관측된 AP 수 : {len(aps)}")
-    print(f" 탐지 findings : {len(findings)}")
+    print(f" APs observed : {len(aps)}")
+    print(f" Findings     : {len(findings)}")
     print("-" * 64)
 
     header = f"{'STATUS':<7} {'SSID':<20} {'BSSID':<18} {'ENC':<6} {'CH':>3} {'SCORE':>6}"
@@ -413,11 +413,11 @@ def print_report(aps: dict, findings: list) -> None:
 
     if findings:
         print("\n" + "-" * 64)
-        print(" [!] 탐지 상세")
+        print(" [!] Detection Details")
         print("-" * 64)
         for i, f in enumerate(findings, 1):
             print(f" [{i}] {f['severity']}  {f['type']}  SSID='{f['ssid']}'  "
-                  f"의심 BSSID={f['suspect_bssid']}")
+                  f"suspect BSSID={f['suspect_bssid']}")
             for r in f["reasons"]:
                 print(f"       - {r}")
     print("=" * 64 + "\n")
@@ -429,17 +429,17 @@ def print_report(aps: dict, findings: list) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Evil Twin(기본 공격) 오프라인 pcap 분석기 (P0)"
+        description="Evil Twin offline pcap analyzer (P0)"
     )
-    parser.add_argument("pcap", help="분석할 pcap/pcapng 파일 경로")
+    parser.add_argument("pcap", help="path to pcap/pcapng file to analyze")
     parser.add_argument("--json", metavar="PATH",
-                        help="결과(JSON: ap_table + findings)를 저장할 경로")
+                        help="save results (JSON: ap_table + findings) to this path")
     parser.add_argument("--quiet", action="store_true",
-                        help="stdout 리포트 생략(JSON 저장만)")
+                        help="suppress stdout report (save JSON only)")
     args = parser.parse_args()
 
     if not Path(args.pcap).is_file():
-        sys.stderr.write(f"[!] 파일을 찾을 수 없습니다: {args.pcap}\n")
+        sys.stderr.write(f"[!] file not found: {args.pcap}\n")
         return 1
 
     aps = parse_pcap(args.pcap)
@@ -461,7 +461,7 @@ def main() -> int:
                 fh, ensure_ascii=False, indent=2,
             )
         if not args.quiet:
-            print(f"[+] JSON 저장: {out_path}")
+            print(f"[+] JSON saved: {out_path}")
 
     # 탐지가 있으면 종료코드 1(스크립트 연동/CI 용), 없으면 0
     return 1 if findings else 0
