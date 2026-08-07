@@ -1469,7 +1469,7 @@ function set_captive_portal_page() {
 	echo -e "echo -e '\t\t\t\t</label>'"
 	echo -e "echo -e '\t\t\t\t<p class=\"showpass-label\"><input type=\"checkbox\" id=\"showpass\"/> 비밀번호 보기</p>'"
 	echo -e "echo -e '\t\t\t\t<button class=\"button\" type=\"submit\">로그인</button>'"
-	echo -e "echo -e '\t\t\t\t\t<p>아이디 찾기 | 비밀번호 찾기 | 회원가입</p>'"
+	echo -e "echo -e '\t\t\t\t\t<p>   아이디 찾기 | 비밀번호 찾기 | 회원가입</p>'"
 	echo -e "echo -e '\t\t\t</form>'"
 	echo -e "echo -e '\t\t</div>'"
 	echo -e "echo -e '\t</body>'"
