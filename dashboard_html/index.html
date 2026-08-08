@@ -57,6 +57,21 @@
         </div>
       </header>
 
+      <section class="learning-guide" aria-labelledby="learningGuideHeading">
+        <div class="learning-guide-intro">
+          <span class="guide-icon" aria-hidden="true">◎</span>
+          <div>
+            <p class="section-kicker">SELF-GUIDED LAB</p>
+            <h2 id="learningGuideHeading">처음이라면 이 순서로 학습하세요</h2>
+          </div>
+        </div>
+        <ol class="learning-guide-steps">
+          <li><span>1</span><strong>시나리오 선택</strong><small>공격 하나를 고릅니다</small></li>
+          <li><span>2</span><strong>5단계 관찰</strong><small>이전·다음으로 천천히 봅니다</small></li>
+          <li><span>3</span><strong>이해도 확인</strong><small>문제와 해설로 마무리합니다</small></li>
+        </ol>
+      </section>
+
       <section class="scenario-hero" aria-labelledby="scenarioTitle">
         <div class="hero-copy">
           <div class="hero-label-row">
@@ -65,6 +80,16 @@
           </div>
           <h2 id="scenarioTitle">인증 해제 공격</h2>
           <p id="scenarioSummary">정상 AP인 것처럼 위장한 인증 해제 프레임이 클라이언트의 연결을 강제로 끊는 과정을 살펴봅니다.</p>
+          <div class="learning-objectives">
+            <div class="learning-duration">
+              <span aria-hidden="true">◷</span>
+              <div><small>예상 학습 시간</small><strong id="learningDuration">약 4분</strong></div>
+            </div>
+            <div>
+              <small>이 시나리오에서 알게 될 것</small>
+              <ul id="learningObjectiveList"></ul>
+            </div>
+          </div>
         </div>
 
         <div class="playback" role="group" aria-label="시뮬레이션 재생 제어">
@@ -84,7 +109,7 @@
             </button>
           </div>
           <div class="speed-control" role="group" aria-label="재생 속도">
-            <span>속도</span>
+            <span>자동 재생 속도</span>
             <button type="button" data-speed="0.5">0.5×</button>
             <button type="button" data-speed="1" class="active" aria-pressed="true">1×</button>
             <button type="button" data-speed="2">2×</button>
@@ -92,49 +117,31 @@
         </div>
       </section>
 
-      <section class="metrics-grid" aria-label="현재 시뮬레이션 요약">
-        <article class="metric-card">
-          <div class="metric-icon cyan" aria-hidden="true">⌁</div>
+      <section class="panel story-timeline-panel" aria-labelledby="timelineHeading">
+        <div class="panel-heading compact">
           <div>
-            <span>관측된 AP</span>
-            <strong id="metricAps">4</strong>
-            <small id="metricApsDelta">기준선과 동일</small>
+            <p class="section-kicker">01 · LEARNING PATH</p>
+            <h3 id="timelineHeading">공격 진행 단계</h3>
           </div>
-        </article>
-        <article class="metric-card">
-          <div class="metric-icon red" aria-hidden="true">!</div>
-          <div>
-            <span>위협 이벤트</span>
-            <strong id="metricAlerts">0</strong>
-            <small id="metricAlertsDelta">활성 경고 없음</small>
-          </div>
-        </article>
-        <article class="metric-card">
-          <div class="metric-icon violet" aria-hidden="true">≋</div>
-          <div>
-            <span>패킷 처리량</span>
-            <strong><span id="metricRate">24</span><em> pkt/s</em></strong>
-            <small id="metricRateDelta">정상 범위</small>
-          </div>
-        </article>
-        <article class="metric-card">
-          <div id="sensorIcon" class="metric-icon green" aria-hidden="true">✓</div>
-          <div>
-            <span>탐지 센서</span>
-            <strong id="metricSensor">정상</strong>
-            <small id="metricSensorDelta">wlan1mon · CH 6</small>
-          </div>
-        </article>
+          <span id="progressText" class="progress-text">1 / 5</span>
+        </div>
+        <div class="progress-track" aria-hidden="true"><span id="progressFill"></span></div>
+        <ol id="phaseTimeline" class="phase-timeline" aria-label="공격 진행 단계"></ol>
       </section>
 
       <section class="primary-grid">
         <article class="panel topology-panel" aria-labelledby="topologyHeading">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">01 · ATTACK FLOW</p>
+              <p class="section-kicker">02 · ATTACK FLOW</p>
               <h3 id="topologyHeading">네트워크에서 무슨 일이 일어날까요?</h3>
             </div>
             <span id="phaseBadge" class="phase-badge">1단계 · 정상 상태</span>
+          </div>
+
+          <div class="phase-focus">
+            <span aria-hidden="true">◉</span>
+            <div><small>이 단계에서 볼 것</small><strong id="phaseFocus">평소의 정상 통신 모습을 먼저 기억하세요.</strong></div>
           </div>
 
           <div id="networkStage" class="network-stage" role="img" aria-label="정상 클라이언트와 AP, 공격자, 센서 사이의 통신 구조">
@@ -156,8 +163,8 @@
         <aside class="panel evidence-panel" aria-labelledby="evidenceHeading">
           <div class="panel-heading compact">
             <div>
-              <p class="section-kicker">02 · WHY IT MATTERS</p>
-              <h3 id="evidenceHeading">탐지 근거</h3>
+              <p class="section-kicker">03 · WHY IT MATTERS</p>
+              <h3 id="evidenceHeading">왜 이렇게 판단할까요?</h3>
             </div>
             <span id="severityBadge" class="severity-badge neutral">관찰 중</span>
           </div>
@@ -202,87 +209,115 @@
         </aside>
       </section>
 
-      <section class="panel story-timeline-panel" aria-labelledby="timelineHeading">
-        <div class="panel-heading compact">
+      <section id="checkpointSection" class="panel checkpoint-panel" aria-labelledby="checkpointHeading">
+        <div class="checkpoint-heading">
           <div>
-            <p class="section-kicker">03 · GUIDED STORY</p>
-            <h3 id="timelineHeading">공격 진행 단계</h3>
+            <p class="section-kicker">04 · CHECK YOUR UNDERSTANDING</p>
+            <h3 id="checkpointHeading">마지막으로 이해도를 확인해 보세요</h3>
+            <p>정답 여부와 관계없이 학습은 완료됩니다. 해설을 읽고 다시 도전할 수 있습니다.</p>
           </div>
-          <span id="progressText" class="progress-text">1 / 5</span>
+          <span id="checkpointBadge" class="checkpoint-badge waiting">5단계 후 열림</span>
         </div>
-        <div class="progress-track" aria-hidden="true"><span id="progressFill"></span></div>
-        <ol id="phaseTimeline" class="phase-timeline" aria-label="공격 진행 단계"></ol>
+
+        <div id="checkpointGate" class="checkpoint-gate">
+          <span aria-hidden="true">🔒</span>
+          <div><strong>아직 학습 중입니다</strong><p>공격 흐름을 5단계까지 확인하면 문제가 열립니다.</p></div>
+        </div>
+
+        <form id="checkpointForm" class="checkpoint-form" hidden>
+          <fieldset id="checkpointFieldset">
+            <legend id="checkpointQuestion">문제를 불러오는 중입니다.</legend>
+            <div id="checkpointOptions" class="checkpoint-options"></div>
+            <button id="checkpointSubmit" class="checkpoint-submit" type="submit" disabled>정답 확인</button>
+          </fieldset>
+        </form>
+
+        <div id="checkpointFeedback" class="checkpoint-feedback" role="status" aria-live="polite" hidden>
+          <div>
+            <strong id="checkpointFeedbackTitle"></strong>
+            <p id="checkpointFeedbackText"></p>
+          </div>
+          <div class="checkpoint-actions">
+            <button id="reviewPhaseButton" type="button">관련 단계 다시 보기</button>
+            <button id="retryCheckpointButton" type="button">다시 풀기</button>
+          </div>
+        </div>
       </section>
 
-      <section class="analysis-grid">
-        <article class="panel chart-panel" aria-labelledby="chartHeading">
-          <div class="panel-heading compact">
-            <div>
-              <p class="section-kicker">04 · SIGNAL CHANGE</p>
-              <h3 id="chartHeading">패킷 변화</h3>
-            </div>
-            <div class="chart-legend" aria-hidden="true">
-              <span><i class="baseline"></i>정상 기준선</span>
-              <span><i class="observed"></i>현재 관측</span>
-            </div>
-          </div>
-          <figure class="chart-wrap" role="img" aria-labelledby="chartHeading chartSummary">
-            <canvas id="trafficChart" aria-hidden="true"></canvas>
-            <p id="chartSummary" class="visually-hidden"></p>
-          </figure>
-        </article>
+      <details class="advanced-lab">
+        <summary>
+          <span class="advanced-summary-icon" aria-hidden="true">＋</span>
+          <span><small>선택 학습 · DEEP DIVE</small><strong>수치와 패킷으로 더 확인하기</strong></span>
+          <span class="advanced-summary-note">입문 학습 후 펼쳐 보세요</span>
+        </summary>
+        <div class="advanced-lab-content">
+          <section class="metrics-grid" aria-label="현재 시뮬레이션 수치 요약">
+            <article class="metric-card">
+              <div class="metric-icon cyan" aria-hidden="true">⌁</div>
+              <div><span>관측된 AP</span><strong id="metricAps">4</strong><small id="metricApsDelta">기준선과 동일</small></div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-icon red" aria-hidden="true">!</div>
+              <div><span>위협 이벤트</span><strong id="metricAlerts">0</strong><small id="metricAlertsDelta">활성 경고 없음</small></div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-icon violet" aria-hidden="true">≋</div>
+              <div><span>패킷 처리량</span><strong><span id="metricRate">24</span><em> pkt/s</em></strong><small id="metricRateDelta">정상 범위</small></div>
+            </article>
+            <article class="metric-card">
+              <div id="sensorIcon" class="metric-icon green" aria-hidden="true">✓</div>
+              <div><span>탐지 센서</span><strong id="metricSensor">정상</strong><small id="metricSensorDelta">wlan1mon · CH 6</small></div>
+            </article>
+          </section>
 
-        <article class="panel log-panel" aria-labelledby="logHeading">
-          <div class="panel-heading compact">
-            <div>
-              <p class="section-kicker">05 · EVENT LOG</p>
-              <h3 id="logHeading">프레임·탐지 이벤트</h3>
-            </div>
-            <span class="live-label"><i aria-hidden="true"></i>SIMULATED LIVE</span>
-          </div>
-          <div class="table-scroll" tabindex="0" aria-label="이벤트 로그 표, 가로로 스크롤할 수 있습니다">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">시간</th>
-                  <th scope="col">유형</th>
-                  <th scope="col">발신지</th>
-                  <th scope="col">관측 내용</th>
-                  <th scope="col">상태</th>
-                </tr>
-              </thead>
-              <tbody id="eventLog"></tbody>
-            </table>
-          </div>
-        </article>
-      </section>
+          <section class="analysis-grid">
+            <article class="panel chart-panel" aria-labelledby="chartHeading">
+              <div class="panel-heading compact">
+                <div><p class="section-kicker">A · SIGNAL CHANGE</p><h3 id="chartHeading">패킷 변화</h3></div>
+                <div class="chart-legend" aria-hidden="true"><span><i class="baseline"></i>정상 기준선</span><span><i class="observed"></i>현재 관측</span></div>
+              </div>
+              <figure class="chart-wrap" role="img" aria-labelledby="chartHeading chartSummary">
+                <canvas id="trafficChart" aria-hidden="true"></canvas>
+                <p id="chartSummary" class="visually-hidden"></p>
+              </figure>
+            </article>
 
-      <section class="lower-grid">
-        <article class="panel identity-panel" aria-labelledby="identityHeading">
-          <div class="panel-heading compact">
-            <div>
-              <p class="section-kicker">06 · WHO IS WHO</p>
-              <h3 id="identityHeading">장치 식별 정보</h3>
-            </div>
-          </div>
-          <div id="identityList" class="identity-list"></div>
-        </article>
+            <article class="panel log-panel" aria-labelledby="logHeading">
+              <div class="panel-heading compact">
+                <div><p class="section-kicker">B · EVENT LOG</p><h3 id="logHeading">프레임·탐지 이벤트</h3></div>
+                <span class="live-label"><i aria-hidden="true"></i>SIMULATED LIVE</span>
+              </div>
+              <div class="table-scroll" tabindex="0" aria-label="이벤트 로그 표, 가로로 스크롤할 수 있습니다">
+                <table>
+                  <thead><tr><th scope="col">시간</th><th scope="col">유형</th><th scope="col">발신지</th><th scope="col">관측 내용</th><th scope="col">상태</th></tr></thead>
+                  <tbody id="eventLog"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
 
-        <article class="panel glossary-panel" aria-labelledby="glossaryHeading">
-          <div class="panel-heading compact">
-            <div>
-              <p class="section-kicker">07 · QUICK GLOSSARY</p>
-              <h3 id="glossaryHeading">용어를 쉽게 이해하기</h3>
+          <article class="panel identity-panel" aria-labelledby="identityHeading">
+            <div class="panel-heading compact">
+              <div><p class="section-kicker">C · WHO IS WHO</p><h3 id="identityHeading">장치 식별 정보</h3></div>
             </div>
-          </div>
-          <div id="glossaryList" class="glossary-list"></div>
-        </article>
-      </section>
+            <div id="identityList" class="identity-list"></div>
+          </article>
+        </div>
+      </details>
+
+      <details class="panel glossary-panel glossary-collapsible">
+        <summary>
+          <span aria-hidden="true">?</span>
+          <span><small>용어 도움말</small><strong id="glossaryHeading">처음 보는 용어가 있나요?</strong></span>
+          <span>용어 설명 펼치기</span>
+        </summary>
+        <div id="glossaryList" class="glossary-list"></div>
+      </details>
 
       <section class="panel history-panel" aria-labelledby="historyHeading">
         <div class="panel-heading compact">
           <div>
-            <p class="section-kicker">08 · LEARNING HISTORY</p>
+            <p class="section-kicker">LEARNING HISTORY</p>
             <h3 id="historyHeading">최근 학습 기록</h3>
           </div>
           <span class="local-data-label">이 브라우저에만 저장</span>

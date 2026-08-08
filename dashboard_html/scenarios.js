@@ -21,6 +21,21 @@
       english: "Deauthentication Flood",
       layer: "802.11 관리 프레임",
       summary: "공격자가 정상 AP 주소를 도용한 인증 해제 프레임을 반복 전송해 클라이언트의 연결을 강제로 끊는 과정을 살펴봅니다.",
+      learning: {
+        estimatedMinutes: 4,
+        objectives: ["정상 통신과 Deauth 급증을 구분하기", "연결 끊김을 공격 프레임과 연결하기", "PMF가 위조 프레임을 막는 이유 이해하기"],
+        checkpoint: {
+          prompt: "인증 해제 공격이라고 판단할 수 있는 가장 직접적인 관측 조합은 무엇인가요?",
+          options: [
+            { id: "a", label: "주변 AP 개수가 평소와 같습니다." },
+            { id: "b", label: "짧은 시간에 Deauth 프레임이 반복되고 클라이언트 연결이 끊깁니다." },
+            { id: "c", label: "클라이언트가 정상 데이터 프레임을 계속 전송합니다." }
+          ],
+          correctOptionId: "b",
+          explanation: "Deauth 프레임의 비정상적인 반복과 실제 연결 해제가 함께 나타나야 단순 통신 오류보다 공격 가능성이 높습니다.",
+          reviewPhaseIndex: 2
+        }
+      },
       technical: "Deauthentication 프레임의 subtype은 0x0C입니다. 짧은 시간에 동일 BSSID를 발신지로 한 프레임이 반복되고 reason code와 sequence 흐름이 정상 패턴에서 벗어나면 공격 가능성이 높습니다.",
       baseAps: 4,
       nodes: [
@@ -106,6 +121,21 @@
       english: "Evil Twin",
       layer: "Rogue AP · 인증",
       summary: "정상 AP와 같은 이름을 사용하는 가짜 AP가 더 강한 신호와 약한 보안 설정으로 사용자의 연결을 가로채는 과정을 확인합니다.",
+      learning: {
+        estimatedMinutes: 4,
+        objectives: ["SSID와 BSSID의 차이 이해하기", "보안 하향이 위험 신호인 이유 찾기", "신뢰 AP 검증 방법 익히기"],
+        checkpoint: {
+          prompt: "이블 트윈을 찾을 때 가장 강한 근거는 무엇인가요?",
+          options: [
+            { id: "a", label: "같은 SSID의 신호가 더 강해졌습니다." },
+            { id: "b", label: "같은 SSID가 미등록 BSSID와 OPEN 보안 방식으로 나타났습니다." },
+            { id: "c", label: "정상 AP가 주기적으로 Beacon을 전송합니다." }
+          ],
+          correctOptionId: "b",
+          explanation: "와이파이 이름만 같다고 같은 AP는 아닙니다. 등록되지 않은 BSSID와 WPA2에서 OPEN으로 바뀐 보안 설정이 함께 보이면 이블 트윈의 강한 근거입니다.",
+          reviewPhaseIndex: 1
+        }
+      },
       technical: "동일하거나 정규화 후 동일한 SSID가 서로 다른 BSSID, 암호화 방식, 제조사 OUI로 관측되면 Rogue AP 후보가 됩니다. Deauth 이후 해당 AP로 재연결하는 시퀀스는 위험도를 높입니다.",
       baseAps: 4,
       nodes: [
@@ -136,6 +166,21 @@
       english: "Beacon Flood",
       layer: "802.11 Beacon",
       summary: "공격자가 수많은 가짜 SSID와 BSSID의 Beacon을 뿌려 주변 AP 목록과 무선 채널을 혼잡하게 만드는 모습을 확인합니다.",
+      learning: {
+        estimatedMinutes: 3,
+        objectives: ["정상 Beacon 주기 기억하기", "가짜 SSID·BSSID 급증 찾기", "비율 제한과 OUI 필터의 역할 이해하기"],
+        checkpoint: {
+          prompt: "비콘 플러드에서 정상 AP 증가와 공격을 구분하는 핵심 단서는 무엇인가요?",
+          options: [
+            { id: "a", label: "짧은 시간에 랜덤한 SSID와 BSSID가 대량으로 생깁니다." },
+            { id: "b", label: "등록 AP 한 대가 같은 SSID로 계속 Beacon을 보냅니다." },
+            { id: "c", label: "클라이언트 한 대가 데이터 프레임을 전송합니다." }
+          ],
+          correctOptionId: "a",
+          explanation: "고유 SSID·BSSID 수와 Beacon 비율이 동시에 급증하고 랜덤 OUI가 많아지면 정상 AP 추가보다 대량 생성 공격에 가깝습니다.",
+          reviewPhaseIndex: 2
+        }
+      },
       technical: "짧은 시간에 고유 SSID/BSSID 수, Beacon 비율, 새 OUI 비율이 함께 급증하는지 분석합니다. 실제 AP의 일반적인 Beacon 간격과 비교하면 대량 생성 패턴을 구별할 수 있습니다.",
       baseAps: 4,
       nodes: [
@@ -166,6 +211,21 @@
       english: "Authentication DoS",
       layer: "802.11 Authentication",
       summary: "공격자가 수많은 가짜 MAC 주소로 인증 요청을 보내 AP의 처리 자원을 고갈시키고 정상 사용자의 연결을 방해하는 과정을 봅니다.",
+      learning: {
+        estimatedMinutes: 3,
+        objectives: ["인증 요청과 정상 연결의 차이 보기", "랜덤 MAC 요청 폭증이 AP에 미치는 영향 이해하기", "요청 비율 제한의 목적 알기"],
+        checkpoint: {
+          prompt: "인증 요청 서비스 거부 공격의 대표적인 관측 패턴은 무엇인가요?",
+          options: [
+            { id: "a", label: "한 사용자가 정상적으로 인증을 한 번 완료합니다." },
+            { id: "b", label: "AP가 정해진 간격으로 Beacon을 보냅니다." },
+            { id: "c", label: "많은 랜덤 MAC 주소가 짧은 시간에 인증 요청을 반복합니다." }
+          ],
+          correctOptionId: "c",
+          explanation: "수많은 가짜 송신자가 인증 요청을 반복하면 AP의 인증 처리 큐가 차고 정상 사용자의 요청이 지연되거나 거부될 수 있습니다.",
+          reviewPhaseIndex: 2
+        }
+      },
       technical: "Authentication request 비율, 고유 source MAC 수, 응답 지연과 Association 실패율을 함께 분석합니다. 연속적으로 바뀌는 MAC에서 같은 AP로 요청이 몰리면 공격 가능성이 큽니다.",
       baseAps: 3,
       nodes: [
@@ -196,6 +256,21 @@
       english: "WIDS Confusion",
       layer: "관리 프레임 이상",
       summary: "서로 모순되는 주소와 상태를 가진 관리 프레임을 대량으로 전송해 무선 침입 탐지 센서의 판단을 흐리는 과정을 확인합니다.",
+      learning: {
+        estimatedMinutes: 4,
+        objectives: ["단일 경고가 오탐일 수 있음을 이해하기", "모순된 주소·상태 전이 찾기", "여러 신호를 함께 분석하는 이유 알기"],
+        checkpoint: {
+          prompt: "WIDS 혼란 공격을 안정적으로 판별하려면 어떤 방식이 적절한가요?",
+          options: [
+            { id: "a", label: "경고 프레임 하나만 보고 즉시 공격으로 확정합니다." },
+            { id: "b", label: "주소, 채널, 시간 순서와 상태 전이를 함께 비교합니다." },
+            { id: "c", label: "모든 관리 프레임을 정상으로 처리합니다." }
+          ],
+          correctOptionId: "b",
+          explanation: "혼란 공격은 서로 모순되는 신호로 센서를 속입니다. 따라서 단일 프레임보다 주소·채널·시계열·상태 전이의 일관성을 함께 봐야 합니다.",
+          reviewPhaseIndex: 3
+        }
+      },
       technical: "불가능한 상태 전이, BSSID/채널 불일치, sequence 재사용, 비정상 subtype 조합과 source 회전 속도를 함께 분석합니다. 단일 프레임보다 연속된 모순 패턴이 핵심입니다.",
       baseAps: 5,
       nodes: [
@@ -226,6 +301,21 @@
       english: "KARMA Attack",
       layer: "Probe Response",
       summary: "클라이언트가 예전에 사용한 와이파이를 찾는 Probe Request에 공격자의 AP가 모두 응답해 자동 연결을 유도하는 과정을 확인합니다.",
+      learning: {
+        estimatedMinutes: 4,
+        objectives: ["Probe Request가 노출하는 정보 이해하기", "모든 SSID에 응답하는 AP 찾기", "자동 연결을 줄이는 습관 익히기"],
+        checkpoint: {
+          prompt: "KARMA AP를 의심할 수 있는 행동은 무엇인가요?",
+          options: [
+            { id: "a", label: "하나의 등록된 SSID에만 정상적으로 응답합니다." },
+            { id: "b", label: "클라이언트가 묻는 여러 저장 SSID에 같은 AP가 모두 응답합니다." },
+            { id: "c", label: "암호화된 데이터 프레임을 전달합니다." }
+          ],
+          correctOptionId: "b",
+          explanation: "서로 다른 저장 네트워크 이름에 같은 AP가 연속으로 응답하면 클라이언트가 찾는 모든 네트워크인 척하는 KARMA 동작일 가능성이 큽니다.",
+          reviewPhaseIndex: 2
+        }
+      },
       technical: "통제된 여러 SSID로 Probe를 보냈을 때 하나의 BSSID가 서로 무관한 이름에 반복 응답하는지 확인합니다. 광고하지 않던 SSID에 즉시 Probe Response를 보내는 패턴이 핵심입니다.",
       baseAps: 4,
       nodes: [
@@ -256,6 +346,21 @@
       english: "ARP Spoofing",
       layer: "LAN · ARP",
       summary: "공격자가 게이트웨이의 IP 주소를 자신의 MAC 주소와 연결하도록 속여 클라이언트 트래픽이 공격자를 경유하게 만드는 과정을 확인합니다.",
+      learning: {
+        estimatedMinutes: 4,
+        objectives: ["IP 주소와 MAC 주소의 역할 구분하기", "게이트웨이 MAC 변경을 이상 징후로 찾기", "ARP 검증 방어의 목적 이해하기"],
+        checkpoint: {
+          prompt: "ARP 스푸핑을 가장 직접적으로 보여 주는 변화는 무엇인가요?",
+          options: [
+            { id: "a", label: "게이트웨이 IP에 연결된 MAC 주소가 갑자기 공격자 주소로 바뀝니다." },
+            { id: "b", label: "AP가 정상 Beacon을 전송합니다." },
+            { id: "c", label: "클라이언트 IP 주소가 그대로 유지됩니다." }
+          ],
+          correctOptionId: "a",
+          explanation: "게이트웨이 IP는 그대로인데 대응하는 MAC 주소가 미등록 장치로 바뀌면 트래픽 경로를 공격자에게 돌리는 ARP 스푸핑의 핵심 징후입니다.",
+          reviewPhaseIndex: 2
+        }
+      },
       technical: "동일 IP에 대해 MAC 매핑이 변경되는지, 요청하지 않은 ARP Reply와 Gratuitous ARP가 급증하는지, gateway MAC의 OUI가 바뀌는지를 분석합니다.",
       baseAps: 1,
       nodes: [
@@ -286,6 +391,21 @@
       english: "WPA Handshake / PMKID",
       layer: "EAPOL · WPA 인증",
       summary: "클라이언트가 AP에 연결할 때 오가는 EAPOL 4단계 메시지와 PMKID가 어떻게 캡처되고 검증되는지 시퀀스로 살펴봅니다.",
+      learning: {
+        estimatedMinutes: 5,
+        objectives: ["4-way Handshake의 의미 이해하기", "캡처와 비밀번호 유출을 구분하기", "강한 암호와 WPA3-SAE의 이점 알기"],
+        checkpoint: {
+          prompt: "완전한 WPA 핸드셰이크가 캡처되었다는 설명으로 옳은 것은 무엇인가요?",
+          options: [
+            { id: "a", label: "와이파이 비밀번호가 즉시 평문으로 노출됐다는 뜻입니다." },
+            { id: "b", label: "암호화가 자동으로 해제되어 모든 트래픽을 읽을 수 있습니다." },
+            { id: "c", label: "인증 교환이 기록됐으며 약한 비밀번호는 오프라인 추측 위험이 있습니다." }
+          ],
+          correctOptionId: "c",
+          explanation: "핸드셰이크 캡처 자체는 비밀번호 유출이 아닙니다. 다만 짧고 흔한 비밀번호는 캡처 데이터를 이용한 오프라인 추측에 취약할 수 있습니다.",
+          reviewPhaseIndex: 4
+        }
+      },
       technical: "EAPOL-Key message의 ACK, MIC, Install, Secure 플래그와 replay counter를 조합해 M1~M4 순서를 판별합니다. RSN 정보의 PMKID 필드도 별도로 확인합니다.",
       baseAps: 3,
       nodes: [

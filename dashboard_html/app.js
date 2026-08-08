@@ -14,6 +14,8 @@
     scenarioEnglish: $("scenarioEnglish"),
     scenarioTitle: $("scenarioTitle"),
     scenarioSummary: $("scenarioSummary"),
+    learningDuration: $("learningDuration"),
+    learningObjectiveList: $("learningObjectiveList"),
     topStatus: $("topStatus"),
     topbarStatus: document.querySelector(".topbar-status"),
     resetButton: $("resetButton"),
@@ -36,6 +38,7 @@
     phaseKicker: $("phaseKicker"),
     phaseTitle: $("phaseTitle"),
     phaseDescription: $("phaseDescription"),
+    phaseFocus: $("phaseFocus"),
     plainExplanation: $("plainExplanation"),
     severityBadge: $("severityBadge"),
     evidenceList: $("evidenceList"),
@@ -57,6 +60,20 @@
     eventLog: $("eventLog"),
     identityList: $("identityList"),
     glossaryList: $("glossaryList"),
+    checkpointSection: $("checkpointSection"),
+    checkpointBadge: $("checkpointBadge"),
+    checkpointGate: $("checkpointGate"),
+    checkpointForm: $("checkpointForm"),
+    checkpointFieldset: $("checkpointFieldset"),
+    checkpointQuestion: $("checkpointQuestion"),
+    checkpointOptions: $("checkpointOptions"),
+    checkpointSubmit: $("checkpointSubmit"),
+    checkpointFeedback: $("checkpointFeedback"),
+    checkpointFeedbackTitle: $("checkpointFeedbackTitle"),
+    checkpointFeedbackText: $("checkpointFeedbackText"),
+    reviewPhaseButton: $("reviewPhaseButton"),
+    retryCheckpointButton: $("retryCheckpointButton"),
+    advancedLab: document.querySelector(".advanced-lab"),
     historyList: $("historyList"),
     clearHistoryButton: $("clearHistoryButton"),
     toast: $("toast")
@@ -81,6 +98,13 @@
   };
 
   const phaseTime = ["00:00", "00:06", "00:12", "00:18", "00:24"];
+  const phaseFocusLabels = [
+    "평소의 정상 통신 모습을 먼저 기억하세요.",
+    "공격 전에 새로 등장하거나 달라진 신호를 찾아보세요.",
+    "누가 누구에게 어떤 프레임을 보내는지 따라가 보세요.",
+    "사용자와 네트워크에 생긴 실제 변화를 확인하세요.",
+    "탐지 근거가 어떤 방어 방법으로 이어지는지 연결해 보세요."
+  ];
   const historyKey = "wfsat-learning-history-v1";
   const state = {
     scenarioId: scenarios[0].id,
@@ -89,7 +113,10 @@
     playing: false,
     timer: null,
     toastTimer: null,
-    resizeTimer: null
+    resizeTimer: null,
+    checkpointSelection: null,
+    checkpointResult: null,
+    checkpointAttempts: 0
   };
 
   function getScenario() {
@@ -118,6 +145,29 @@
     }
   }
 
+  function getHistoryEntry(scenarioId) {
+    return safeHistoryRead().find((entry) => entry && entry.scenarioId === scenarioId) || null;
+  }
+
+  function getLearningConfig(scenario) {
+    const learning = scenario.learning || {};
+    const objectives = Array.isArray(learning.objectives) && learning.objectives.length
+      ? learning.objectives.slice(0, 3)
+      : ["공격 흐름을 단계별로 이해하기", "탐지 근거와 방어 방법 연결하기"];
+    return {
+      estimatedMinutes: Number.isFinite(learning.estimatedMinutes) ? learning.estimatedMinutes : 4,
+      objectives,
+      checkpoint: learning.checkpoint || null
+    };
+  }
+
+  function isCheckpointValid(checkpoint) {
+    if (!checkpoint || typeof checkpoint.prompt !== "string" || !Array.isArray(checkpoint.options)) return false;
+    if (checkpoint.options.length < 2 || typeof checkpoint.correctOptionId !== "string") return false;
+    return checkpoint.options.every((option) => option && typeof option.id === "string" && typeof option.label === "string")
+      && checkpoint.options.some((option) => option.id === checkpoint.correctOptionId);
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replaceAll("&", "&amp;")
@@ -128,22 +178,29 @@
   }
 
   function renderScenarioNavigation() {
-    elements.scenarioList.innerHTML = scenarios.map((scenario) => `
+    const history = safeHistoryRead();
+    elements.scenarioList.innerHTML = scenarios.map((scenario) => {
+      const entry = history.find((item) => item && item.scenarioId === scenario.id);
+      const progressClass = entry && entry.checkpointCorrect ? "checked" : entry && entry.checkpointAnswered ? "retry" : entry ? "complete" : "new";
+      const progressLabel = entry && entry.checkpointCorrect ? "이해 확인 완료" : entry && entry.checkpointAnswered ? "문제 재도전" : entry ? "5단계 완료" : "학습 전";
+      return `
       <button
         class="scenario-button"
         type="button"
         data-scenario="${escapeHtml(scenario.id)}"
         aria-current="${scenario.id === state.scenarioId ? "true" : "false"}"
-        aria-label="${escapeHtml(scenario.title)} 시나리오 선택"
+        aria-label="${escapeHtml(scenario.title)} 시나리오 선택, ${progressLabel}"
       >
         <span class="scenario-icon" aria-hidden="true">${scenario.icon}</span>
         <span class="scenario-name">
           <strong>${escapeHtml(scenario.shortName)}</strong>
           <span>${escapeHtml(scenario.english)}</span>
+          <small class="scenario-progress ${progressClass}">${progressLabel}</small>
         </span>
         <span class="scenario-arrow" aria-hidden="true">›</span>
       </button>
-    `).join("");
+    `;
+    }).join("");
 
     elements.scenarioList.querySelectorAll("[data-scenario]").forEach((button) => {
       button.addEventListener("click", () => selectScenario(button.dataset.scenario));
@@ -151,10 +208,13 @@
   }
 
   function renderHero(scenario) {
+    const learning = getLearningConfig(scenario);
     elements.scenarioLayer.textContent = scenario.layer;
     elements.scenarioEnglish.textContent = scenario.english;
     elements.scenarioTitle.textContent = scenario.title;
     elements.scenarioSummary.textContent = scenario.summary;
+    elements.learningDuration.textContent = `약 ${learning.estimatedMinutes}분`;
+    elements.learningObjectiveList.innerHTML = learning.objectives.map((objective) => `<li>${escapeHtml(objective)}</li>`).join("");
   }
 
   function renderMetrics(phase) {
@@ -176,6 +236,7 @@
     elements.phaseKicker.textContent = phase.kicker;
     elements.phaseTitle.textContent = phase.title;
     elements.phaseDescription.textContent = phase.description;
+    elements.phaseFocus.textContent = phaseFocusLabels[state.phaseIndex] || phaseFocusLabels[0];
     elements.plainExplanation.textContent = phase.plain;
     elements.severityBadge.textContent = severityLabels[phase.severity];
     elements.severityBadge.className = `severity-badge ${phase.severity}`;
@@ -370,6 +431,8 @@
     const canvas = elements.trafficChart;
     const context = canvas.getContext("2d");
     const rect = canvas.getBoundingClientRect();
+    elements.chartSummary.textContent = `${scenario.title} ${phase.label}: 정상 기준선 ${scenario.phases[0].rate} 패킷/초, 현재 ${phase.rate} 패킷/초입니다.`;
+    if (rect.width < 10) return;
     const width = Math.max(320, rect.width);
     const height = Math.max(190, rect.height);
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -458,7 +521,6 @@
     context.fillStyle = state.phaseIndex === 4 ? "#3ed6a1" : state.phaseIndex >= 2 ? "#ff5d73" : "#34c8ff";
     context.fill();
 
-    elements.chartSummary.textContent = `${scenario.title} ${phase.label}: 정상 기준선 ${scenario.phases[0].rate} 패킷/초, 현재 ${phase.rate} 패킷/초입니다.`;
   }
 
   function renderEventLog(scenario) {
@@ -500,19 +562,88 @@
     `).join("");
   }
 
+  function renderCheckpoint(scenario) {
+    const checkpoint = getLearningConfig(scenario).checkpoint;
+    const unlocked = state.phaseIndex === scenario.phases.length - 1;
+    const valid = isCheckpointValid(checkpoint);
+    const historyEntry = getHistoryEntry(scenario.id);
+
+    elements.checkpointGate.hidden = unlocked && valid;
+    elements.checkpointForm.hidden = !unlocked || !valid || state.checkpointResult !== null;
+    elements.checkpointFeedback.hidden = !unlocked || state.checkpointResult === null;
+
+    if (!valid) {
+      elements.checkpointBadge.textContent = "문제 준비 중";
+      elements.checkpointBadge.className = "checkpoint-badge waiting";
+      elements.checkpointGate.innerHTML = '<span aria-hidden="true">ℹ</span><div><strong>이 시나리오의 문제를 불러오지 못했습니다</strong><p>단계 학습은 계속 진행할 수 있습니다.</p></div>';
+      return;
+    }
+
+    if (!unlocked) {
+      elements.checkpointBadge.textContent = "5단계 후 열림";
+      elements.checkpointBadge.className = "checkpoint-badge waiting";
+      elements.checkpointGate.innerHTML = '<span aria-hidden="true">🔒</span><div><strong>아직 학습 중입니다</strong><p>공격 흐름을 5단계까지 확인하면 문제가 열립니다.</p></div>';
+      return;
+    }
+
+    const previouslyCorrect = Boolean(historyEntry && historyEntry.checkpointCorrect);
+    const needsRetry = Boolean(historyEntry && historyEntry.checkpointAnswered && !historyEntry.checkpointCorrect);
+    elements.checkpointBadge.textContent = state.checkpointResult === true || previouslyCorrect
+      ? "이해 확인 완료"
+      : state.checkpointResult === false || needsRetry ? "재도전 가능" : "문제 풀기";
+    elements.checkpointBadge.className = `checkpoint-badge ${state.checkpointResult === true || previouslyCorrect ? "complete" : state.checkpointResult === false || needsRetry ? "retry" : "ready"}`;
+    elements.checkpointQuestion.textContent = checkpoint.prompt;
+    elements.checkpointOptions.innerHTML = checkpoint.options.map((option) => `
+      <label class="checkpoint-option">
+        <input type="radio" name="checkpointAnswer" value="${escapeHtml(option.id)}" ${state.checkpointSelection === option.id ? "checked" : ""}>
+        <span class="option-marker" aria-hidden="true">${escapeHtml(option.id.toUpperCase())}</span>
+        <span>${escapeHtml(option.label)}</span>
+      </label>
+    `).join("");
+    elements.checkpointSubmit.disabled = state.checkpointSelection === null;
+
+    if (state.checkpointResult !== null) {
+      const correct = state.checkpointResult;
+      elements.checkpointFeedback.className = `checkpoint-feedback ${correct ? "correct" : "incorrect"}`;
+      elements.checkpointFeedbackTitle.textContent = correct ? "정답입니다. 핵심을 잘 찾았어요." : "아직 괜찮습니다. 해설에서 근거를 다시 확인해 보세요.";
+      elements.checkpointFeedbackText.textContent = checkpoint.explanation;
+      elements.reviewPhaseButton.hidden = correct;
+      elements.retryCheckpointButton.textContent = correct ? "한 번 더 풀기" : "다시 풀기";
+    }
+  }
+
   function saveCompletion(scenario) {
     const history = safeHistoryRead();
-    const latest = history[0];
-    if (latest && latest.scenarioId === scenario.id && Date.now() - latest.timestamp < 5000) return;
+    const existingIndex = history.findIndex((entry) => entry && entry.scenarioId === scenario.id);
+    const existing = existingIndex >= 0 ? history.splice(existingIndex, 1)[0] : null;
     const entry = {
+      ...(existing || {}),
+      scenarioId: scenario.id,
+      title: scenario.title,
+      icon: scenario.icon,
+      timestamp: existing && existing.timestamp ? existing.timestamp : Date.now(),
+      score: existing && existing.checkpointCorrect ? "이해 확인 완료" : existing && existing.checkpointAnswered ? "문제 재도전" : "5단계 완료"
+    };
+    safeHistoryWrite([entry, ...history].slice(0, 6));
+  }
+
+  function saveCheckpointResult(scenario, correct) {
+    const history = safeHistoryRead();
+    const existingIndex = history.findIndex((entry) => entry && entry.scenarioId === scenario.id);
+    const existing = existingIndex >= 0 ? history.splice(existingIndex, 1)[0] : {};
+    const checkpointCorrect = Boolean(existing.checkpointCorrect || correct);
+    const entry = {
+      ...existing,
       scenarioId: scenario.id,
       title: scenario.title,
       icon: scenario.icon,
       timestamp: Date.now(),
-      score: "5단계 완료"
+      score: checkpointCorrect ? "이해 확인 완료" : "문제 재도전",
+      checkpointAnswered: true,
+      checkpointCorrect,
+      checkpointAttempts: Number(existing.checkpointAttempts || 0) + 1
     };
     safeHistoryWrite([entry, ...history].slice(0, 6));
-    renderHistory();
   }
 
   function renderHistory() {
@@ -525,11 +656,12 @@
     elements.historyList.innerHTML = history.slice(0, 6).map((entry) => {
       const date = new Date(entry.timestamp);
       const dateLabel = Number.isNaN(date.getTime()) ? "최근" : new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+      const statusClass = entry.checkpointCorrect ? "checked" : entry.checkpointAnswered ? "retry" : "complete";
       return `
         <article class="history-card">
           <span aria-hidden="true">${entry.icon || "✓"}</span>
           <div><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(dateLabel)}</small></div>
-          <span class="history-score">${escapeHtml(entry.score || "완료")}</span>
+          <span class="history-score ${statusClass}">${escapeHtml(entry.score || "완료")}</span>
         </article>
       `;
     }).join("");
@@ -551,6 +683,9 @@
   function render(options = {}) {
     const scenario = getScenario();
     const phase = getPhase();
+    if (state.phaseIndex === scenario.phases.length - 1 && options.recordCompletion !== false) {
+      saveCompletion(scenario);
+    }
     renderScenarioNavigation();
     renderHero(scenario);
     renderMetrics(phase);
@@ -561,21 +696,19 @@
     renderEventLog(scenario);
     renderIdentityList(scenario, phase);
     renderGlossary(scenario);
+    renderCheckpoint(scenario);
     renderHistory();
     updatePlaybackUi();
-
-    if (state.phaseIndex === scenario.phases.length - 1 && options.recordCompletion !== false) {
-      saveCompletion(scenario);
-    }
   }
 
   function setPhase(index, options = {}) {
     const scenario = getScenario();
+    const previousIndex = state.phaseIndex;
     state.phaseIndex = Math.max(0, Math.min(index, scenario.phases.length - 1));
     render(options);
-    if (state.phaseIndex === scenario.phases.length - 1 && state.playing) {
-      stopPlayback(false);
-      showToast(`${scenario.title}의 5단계 학습을 완료했습니다.`);
+    if (state.phaseIndex === scenario.phases.length - 1 && previousIndex !== state.phaseIndex) {
+      if (state.playing) stopPlayback(false);
+      showToast(`${scenario.title}의 5단계를 완료했습니다. 이제 이해도를 확인해 보세요.`);
     }
   }
 
@@ -584,13 +717,20 @@
     stopPlayback(false);
     state.scenarioId = scenarioId;
     state.phaseIndex = 0;
+    state.checkpointSelection = null;
+    state.checkpointResult = null;
+    state.checkpointAttempts = 0;
     render({ recordCompletion: false });
     showToast(`${getScenario().title} 시나리오를 불러왔습니다.`);
   }
 
   function startPlayback() {
     const scenario = getScenario();
-    if (state.phaseIndex === scenario.phases.length - 1) state.phaseIndex = 0;
+    if (state.phaseIndex === scenario.phases.length - 1) {
+      state.phaseIndex = 0;
+      state.checkpointSelection = null;
+      state.checkpointResult = null;
+    }
     clearInterval(state.timer);
     state.playing = true;
     updatePlaybackUi();
@@ -653,8 +793,52 @@
   });
   elements.clearHistoryButton.addEventListener("click", () => {
     safeHistoryWrite([]);
-    renderHistory();
+    state.checkpointSelection = null;
+    state.checkpointResult = null;
+    state.checkpointAttempts = 0;
+    render({ recordCompletion: false });
     showToast("이 브라우저의 학습 기록을 초기화했습니다.");
+  });
+
+  elements.checkpointOptions.addEventListener("change", (event) => {
+    const input = event.target.closest('input[name="checkpointAnswer"]');
+    if (!input) return;
+    state.checkpointSelection = input.value;
+    elements.checkpointSubmit.disabled = false;
+  });
+
+  elements.checkpointForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const scenario = getScenario();
+    const checkpoint = getLearningConfig(scenario).checkpoint;
+    if (state.phaseIndex !== scenario.phases.length - 1 || !isCheckpointValid(checkpoint) || state.checkpointSelection === null) return;
+    state.checkpointAttempts += 1;
+    state.checkpointResult = state.checkpointSelection === checkpoint.correctOptionId;
+    saveCheckpointResult(scenario, state.checkpointResult);
+    renderScenarioNavigation();
+    renderCheckpoint(scenario);
+    renderHistory();
+    showToast(state.checkpointResult ? "정답입니다. 이해도 확인을 완료했습니다." : "해설을 확인한 뒤 다시 도전해 보세요.");
+  });
+
+  elements.retryCheckpointButton.addEventListener("click", () => {
+    state.checkpointSelection = null;
+    state.checkpointResult = null;
+    renderCheckpoint(getScenario());
+    const firstOption = elements.checkpointOptions.querySelector('input[name="checkpointAnswer"]');
+    if (firstOption) firstOption.focus();
+  });
+
+  elements.reviewPhaseButton.addEventListener("click", () => {
+    const scenario = getScenario();
+    const checkpoint = getLearningConfig(scenario).checkpoint;
+    const reviewIndex = isCheckpointValid(checkpoint) && Number.isInteger(checkpoint.reviewPhaseIndex) ? checkpoint.reviewPhaseIndex : 2;
+    setPhase(reviewIndex, { recordCompletion: false });
+    document.querySelector(".primary-grid").scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  });
+
+  elements.advancedLab.addEventListener("toggle", () => {
+    if (elements.advancedLab.open) requestAnimationFrame(() => drawTrafficChart(getScenario(), getPhase()));
   });
 
   window.addEventListener("keydown", (event) => {
