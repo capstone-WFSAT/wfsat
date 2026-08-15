@@ -55,6 +55,18 @@
         { term: "Reason Code", description: "연결이 해제된 이유를 나타내는 숫자 필드입니다." },
         { term: "PMF", description: "위조·변조된 관리 프레임을 식별하도록 보호하는 표준입니다." }
       ],
+      signature: {
+        type: "deauth-burst",
+        title: "Deauth 프레임 버스트 · 연결 상태",
+        caption: "위조 Deauth가 쏟아질 때 연결이 어떻게 끊기는지, PMF가 무엇을 막는지 보세요.",
+        phases: [
+          { level: 0, framesLabel: "0 frames", reason: null, connection: "associated", note: "정상 연결입니다. 위조 관리 프레임이 관측되지 않습니다." },
+          { level: 1, framesLabel: "≈ 8 frames/s", reason: null, connection: "associated", note: "공격자가 채널을 관찰하며 대상 주소를 수집합니다. 아직 연결 방해는 없습니다." },
+          { level: 3, framesLabel: "121 frames / 2s", reason: "7", connection: "dropping", note: "위조 BSSID로 Reason 7 Deauth가 반복 주입되어 연결이 흔들립니다." },
+          { level: 4, framesLabel: "682 frames / 5s", reason: "7", connection: "disconnected", note: "클라이언트가 위조 프레임을 진짜 명령으로 오인해 연결이 끊기고 재접속을 반복합니다." },
+          { level: 0, framesLabel: "거부됨 (PMF)", reason: "7", connection: "protected", pmf: true, note: "PMF(802.11w)가 위조 관리 프레임을 거부해 연결이 유지됩니다." }
+        ]
+      },
       phases: [
         {
           label: "정상 상태", kicker: "NORMAL STATE", title: "클라이언트가 진짜 AP와 정상 통신합니다",
@@ -150,6 +162,24 @@
         { term: "OUI", description: "MAC 주소 앞부분으로 장비 제조사를 구분할 때 사용합니다." },
         { term: "RSSI", description: "수신 신호 세기를 나타내며 0에 가까울수록 강합니다." }
       ],
+      signature: {
+        type: "ap-compare",
+        title: "정상 AP vs 가짜 AP",
+        caption: "이름(SSID)은 같아도 주소·보안·신호가 어떻게 다른지 나란히 비교하세요.",
+        fields: [
+          { key: "ssid", label: "SSID", real: "Campus_WiFi", fake: "Campus_WiFi", verdict: "trap" },
+          { key: "bssid", label: "BSSID", real: "AA:11:22:33:44:01", fake: "AA:11:22:33:44:99", verdict: "differ" },
+          { key: "security", label: "보안", real: "WPA2", fake: "OPEN", verdict: "downgrade" },
+          { key: "rssi", label: "신호(RSSI)", real: "-58 dBm", fake: "-32 dBm", verdict: "fake-stronger" }
+        ],
+        phases: [
+          { fakePresent: false, connectedTo: "real", fakeStatus: "idle", note: "같은 이름을 쓰는 신뢰 AP 하나만 존재합니다." },
+          { fakePresent: true, connectedTo: "real", fakeStatus: "rogue", note: "같은 SSID·다른 BSSID의 Open AP가 더 강한 신호로 등장합니다." },
+          { fakePresent: true, connectedTo: null, fakeStatus: "attacking", note: "가짜 AP가 Deauth로 정상 연결을 끊어 재검색을 유도합니다." },
+          { fakePresent: true, connectedTo: "fake", fakeStatus: "rogue", note: "기기가 이름이 같고 신호가 강한 가짜 AP에 연결됩니다." },
+          { fakePresent: true, connectedTo: "real", fakeStatus: "blocked", note: "SSID·BSSID·보안 불일치로 가짜 AP를 차단하고 신뢰 AP로 복원합니다." }
+        ]
+      },
       phases: [
         { label: "정상 상태", kicker: "TRUSTED NETWORK", title: "사용자는 암호화된 진짜 AP에 연결되어 있습니다", description: "등록된 BSSID와 WPA2 보안 설정이 기준 정보와 일치합니다.", plain: "한 개의 신뢰할 수 있는 AP만 같은 이름을 사용하고 있습니다.", severity: "neutral", rate: 46, alerts: 0, evidence: ["등록 BSSID와 일치", "WPA2 암호화 사용", "동일 SSID 중복 없음"], states: { client: "normal", "real-ap": "normal", attacker: "idle", sensor: "normal" }, links: [link("real-ap", "client", "normal", "WPA2 연결"), link("real-ap", "sensor", "normal", "기준 정보")], packet: packet("real-ap", "client", "DATA", "normal"), event: event("Association", "normal", "AA:11:22:33:44:01", "등록 AP 연결 유지", "정상"), packetFields: { "SSID": "Campus_WiFi", "BSSID": "AA:11:22:33:44:01", "Security": "WPA2" } },
         { label: "공격 준비", kicker: "ROGUE AP ONLINE", title: "같은 이름의 가짜 AP가 등장합니다", description: "공격자는 진짜 AP의 SSID를 복제하고 더 강한 신호로 Open AP를 송출합니다.", plain: "겉으로는 이름이 같지만 주소와 잠금 방식이 다른 가짜 와이파이가 생겼습니다.", severity: "medium", rate: 78, alerts: 3, aps: 5, evidence: ["동일 SSID의 새 BSSID 관측", "WPA2와 OPEN 보안 방식 불일치", "미등록 OUI와 비정상적으로 강한 RSSI"], states: { client: "normal", "real-ap": "normal", attacker: "danger", sensor: "warning" }, links: [link("real-ap", "client", "normal", "기존 연결"), link("attacker", "client", "warning", "동일 SSID Beacon"), link("attacker", "sensor", "warning", "중복 식별")], packet: packet("attacker", "client", "BEACON", "warning"), event: event("Rogue Beacon", "warning", "AA:11:22:33:44:99", "Campus_WiFi · OPEN · -32 dBm", "의심"), packetFields: { "SSID": "Campus_WiFi", "BSSID": "AA:11:22:33:44:99", "Security": "OPEN" } },

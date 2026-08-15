@@ -60,6 +60,11 @@
     eventLog: $("eventLog"),
     identityList: $("identityList"),
     glossaryList: $("glossaryList"),
+    signaturePanel: $("signaturePanel"),
+    signatureBadge: $("signatureBadge"),
+    signatureCaption: $("signatureCaption"),
+    signatureBody: $("signatureBody"),
+    signatureNote: $("signatureNote"),
     checkpointSection: $("checkpointSection"),
     checkpointBadge: $("checkpointBadge"),
     checkpointGate: $("checkpointGate"),
@@ -95,6 +100,33 @@
     defense: "보호됨",
     idle: "대기",
     offline: "연결 끊김"
+  };
+
+  const connectionLabels = {
+    associated: "연결됨",
+    dropping: "끊기는 중",
+    disconnected: "끊김",
+    protected: "PMF 보호"
+  };
+
+  const verdictLabels = {
+    trap: "같아서 위험",
+    differ: "다름",
+    downgrade: "보안 하향",
+    "fake-stronger": "더 강함"
+  };
+
+  const verdictSymbols = {
+    trap: "=",
+    differ: "≠",
+    downgrade: "↓",
+    "fake-stronger": "↑"
+  };
+
+  const fakeStatusLabels = {
+    rogue: "Rogue AP",
+    attacking: "Deauth 전송",
+    blocked: "차단됨"
   };
 
   const phaseTime = ["00:00", "00:06", "00:12", "00:18", "00:24"];
@@ -562,6 +594,112 @@
     `).join("");
   }
 
+  function setSignatureBody(title, bodyHtml, summary) {
+    elements.signatureBody.innerHTML = `<p class="signature-frame-title">${escapeHtml(title)}</p>${bodyHtml}`;
+    elements.signatureBody.setAttribute("aria-label", summary);
+  }
+
+  function renderDeauthBurst(signature, data) {
+    const level = Math.max(0, Math.min(Number(data.level) || 0, 4));
+    const rejected = Boolean(data.pmf);
+    const connection = connectionLabels[data.connection] ? data.connection : "associated";
+    const connectionLabel = connectionLabels[connection];
+    const framesLabel = data.framesLabel || "";
+    const reasonChip = data.reason ? `<span class="burst-reason">Reason ${escapeHtml(data.reason)}</span>` : "";
+
+    setSignatureBody(signature.title, `
+      <div class="deauth-burst${rejected ? " rejected" : ""}">
+        <div class="burst-row">
+          <span class="burst-actor">공격자 ▶</span>
+          <span class="burst-meter${rejected ? " burst-rejected" : ""}"><span class="burst-fill lv${level}"></span></span>
+          <span class="burst-frames">${escapeHtml(framesLabel)}</span>
+          ${reasonChip}
+        </div>
+        <div class="burst-row">
+          <span class="burst-actor">클라이언트 연결</span>
+          <span class="conn-lamp ${escapeHtml(connection)}"><i aria-hidden="true"></i>${escapeHtml(connectionLabel)}</span>
+        </div>
+      </div>
+    `, rejected
+      ? `위조 Deauth 프레임이 PMF에 의해 거부됨, 클라이언트 연결 ${connectionLabel}`
+      : `위조 Deauth ${framesLabel}${data.reason ? `, Reason ${data.reason}` : ""}, 클라이언트 연결 ${connectionLabel}`);
+  }
+
+  function renderApCompare(signature, data) {
+    const fields = Array.isArray(signature.fields) ? signature.fields : [];
+    const fakePresent = Boolean(data.fakePresent);
+    const fakeStatus = data.fakeStatus || "idle";
+
+    function connectionBadge(side) {
+      if (data.connectedTo === side) return '<span class="ap-connected-badge">연결됨</span>';
+      if (side === "real" && !data.connectedTo) return '<span class="ap-connected-badge lost">연결 끊김</span>';
+      return "";
+    }
+
+    const realFields = fields.map((field) => `
+      <div class="ap-field">
+        <span class="ap-field-label">${escapeHtml(field.label)}</span>
+        <span class="ap-field-value">${escapeHtml(field.real)}</span>
+      </div>
+    `).join("");
+
+    const fakeFields = fields.map((field) => `
+      <div class="ap-field ${escapeHtml(field.verdict)}">
+        <span class="ap-field-label">${escapeHtml(field.label)}</span>
+        <span class="ap-field-value">${escapeHtml(field.fake)}</span>
+        <span class="ap-field-flag">${escapeHtml(verdictLabels[field.verdict] || "")}</span>
+      </div>
+    `).join("");
+
+    const relations = fields
+      .map((field) => `<span>${fakePresent ? escapeHtml(verdictSymbols[field.verdict] || "·") : "·"}</span>`)
+      .join("");
+
+    const statusChip = fakePresent && fakeStatusLabels[fakeStatus]
+      ? `<span class="ap-status-chip ${escapeHtml(fakeStatus)}">${escapeHtml(fakeStatusLabels[fakeStatus])}</span>`
+      : "";
+
+    setSignatureBody(signature.title, `
+      <div class="ap-compare">
+        <article class="ap-card real">
+          <header class="ap-card-head"><strong>정상 AP</strong>${connectionBadge("real")}</header>
+          ${realFields}
+        </article>
+        <div class="ap-rel"><span class="ap-rel-spacer"></span>${relations}</div>
+        <article class="ap-card fake ${fakePresent ? escapeHtml(fakeStatus) : "absent"}">
+          <header class="ap-card-head"><strong>가짜 AP</strong>${statusChip}${connectionBadge("fake")}</header>
+          ${fakePresent ? fakeFields : '<div class="ap-placeholder">같은 이름의 다른 AP가 아직 없습니다</div>'}
+        </article>
+      </div>
+    `, `${fakePresent
+      ? fields.map((field) => `${field.label}은 정상 AP ${field.real}, 가짜 AP ${field.fake}`).join(", ")
+      : "같은 이름을 쓰는 AP가 정상 AP 하나뿐"}. ${data.connectedTo === "fake"
+      ? "현재 기기가 가짜 AP에 연결됨"
+      : data.connectedTo === "real" ? "현재 기기가 정상 AP에 연결됨" : "현재 기기의 연결이 끊김"}`);
+  }
+
+  function renderSignature(scenario) {
+    const signature = scenario.signature;
+    const panel = elements.signaturePanel;
+    const renderers = {
+      "deauth-burst": renderDeauthBurst,
+      "ap-compare": renderApCompare
+    };
+    const data = signature && Array.isArray(signature.phases) ? signature.phases[state.phaseIndex] : null;
+    const renderer = signature ? renderers[signature.type] : null;
+
+    if (!data || !renderer) {
+      panel.hidden = true;
+      return;
+    }
+
+    panel.hidden = false;
+    elements.signatureBadge.textContent = `${state.phaseIndex + 1}단계`;
+    elements.signatureCaption.textContent = signature.caption || "";
+    elements.signatureNote.textContent = data.note || "";
+    renderer(signature, data);
+  }
+
   function renderCheckpoint(scenario) {
     const checkpoint = getLearningConfig(scenario).checkpoint;
     const unlocked = state.phaseIndex === scenario.phases.length - 1;
@@ -692,6 +830,7 @@
     renderNarrative(scenario, phase);
     renderTimeline(scenario);
     renderTopology(scenario, phase);
+    renderSignature(scenario);
     drawTrafficChart(scenario, phase);
     renderEventLog(scenario);
     renderIdentityList(scenario, phase);
