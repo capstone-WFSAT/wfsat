@@ -189,49 +189,50 @@ class Configuration:
                 Macchanger.random(full_random=not cls.random_mac_vendor)
 
     @classmethod
-    def load_from_arguments(cls):
-        """ Sets configuration values based on Argument.args object """
-        from ..args import Arguments
+    @classmethod
+def load_from_arguments(cls):
+    """ Sets configuration values based on Argument.args object """
+    from ..args import Arguments
 
-        args = Arguments(cls).args
-        cls.parse_settings_args(args)
-        cls.parse_wep_args(args)
-        cls.parse_wpa_args(args)
-        cls.parse_wps_args(args)
-        cls.parse_pmkid_args(args)
-        cls.parse_eviltwin_args(args)
-        cls.parse_attack_monitor_args(args)
-        cls.parse_dual_interface_args(args)
-        cls.parse_wpasec_args(args)
-        cls.parse_encryption()
+    args = Arguments(cls).args
+    cls.parse_settings_args(args)
+    cls.parse_pmkid_args(args)
+    # PMKID 패시브 캡처 테스트에 당장 필요 없어 임시 비활성화
+    # cls.parse_wep_args(args)
+    # cls.parse_wpa_args(args)
+    # cls.parse_wps_args(args)
+    # cls.parse_eviltwin_args(args)
+    # cls.parse_attack_monitor_args(args)
+    # cls.parse_dual_interface_args(args)
+    # cls.parse_wpasec_args(args)
+    # cls.parse_encryption()
+    # cls.parse_wep_attacks()
 
-        cls.parse_wep_attacks()
+    # cls.validate()
 
-        cls.validate()
+    # Commands
+    if args.cracked:
+        cls.show_cracked = True
+    if args.ignored:
+        cls.show_ignored = True
+    if args.check_handshake:
+        cls.check_handshake = args.check_handshake
+    if args.crack_handshake:
+        cls.crack_handshake = True
+    if args.update_db:
+        cls.update_db = True
+    if hasattr(args, 'syscheck') and args.syscheck:
+        cls.syscheck = True
 
-        # Commands
-        if args.cracked:
-            cls.show_cracked = True
-        if args.ignored:
-            cls.show_ignored = True
-        if args.check_handshake:
-            cls.check_handshake = args.check_handshake
-        if args.crack_handshake:
-            cls.crack_handshake = True
-        if args.update_db:
-            cls.update_db = True
-        if hasattr(args, 'syscheck') and args.syscheck:
-            cls.syscheck = True
-
-        # Session resume
-        if args.resume:
-            cls.resume = True
-        if args.resume_latest:
-            cls.resume_latest = True
-        if args.resume_id:
-            cls.resume_id = args.resume_id
-        if args.clean_sessions:
-            cls.clean_sessions = True
+    # Session resume
+    if args.resume:
+        cls.resume = True
+    if args.resume_latest:
+        cls.resume_latest = True
+    if args.resume_id:
+        cls.resume_id = args.resume_id
+    if args.clean_sessions:
+        cls.clean_sessions = True
 
     @classmethod
     def validate(cls):
