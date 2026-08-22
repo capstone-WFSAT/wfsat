@@ -308,7 +308,7 @@ class HcxDumpToolPassive:
             'hcxdumptool',
             '-i', self.interface,
             '--rds=3',  # Passive mode with PMKID capture
-            '-w', self.output_file
+            '-w', self.output_file,
             '--enable_status=15'  # Enable all status messages
         ]
 
