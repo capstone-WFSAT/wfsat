@@ -24,8 +24,8 @@ class Wifi:
             Color.pl('{!} {R}re-run with {O}sudo{W}')
             sys.exit(1)
 
-        from .tools.dependency import Dependency
-        Dependency.run_dependency_check()
+        #from .tools.dependency import Dependency
+        #Dependency.run_dependency_check()
 
     def start(self):
         # 지금은 passive PMKID 캡처 모드만 지원
