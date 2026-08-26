@@ -52,3 +52,6 @@ streamlit run dashboard/app.py
 
 # 6. 끝나면 가상환경 비활성화
 deactivate
+
+# 대쉬보드 활성화
+python3 -m http.server 8080 --directory dashboard_html
