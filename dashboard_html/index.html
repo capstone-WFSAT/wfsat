@@ -20,29 +20,11 @@
         </div>
       </div>
 
-      <div class="simulation-notice">
-        <span class="notice-dot" aria-hidden="true"></span>
-        <div>
-          <strong>교육용 시뮬레이션</strong>
-          <span>실제 공격은 실행되지 않습니다</span>
-        </div>
-      </div>
-
       <div class="nav-heading">
         <span>공격 라이브러리</span>
         <span class="count-badge">8</span>
       </div>
       <nav id="scenarioList" class="scenario-list" aria-label="공격 유형"></nav>
-
-      <div class="sidebar-guide">
-        <strong>화면 읽는 법</strong>
-        <ul>
-          <li><span class="legend-dot normal"></span>정상 통신</li>
-          <li><span class="legend-dot warning"></span>이상 징후</li>
-          <li><span class="legend-dot danger"></span>공격 프레임</li>
-          <li><span class="legend-dot defense"></span>탐지·방어</li>
-        </ul>
-      </div>
     </aside>
 
     <main id="mainContent" class="main-content" tabindex="-1">
@@ -51,27 +33,19 @@
           <p class="eyebrow">WIRELESS FRAME SECURITY ANALYSIS TOOL</p>
           <h1>무선 공격 시각화 실험실</h1>
         </div>
-        <div class="topbar-status" role="status" aria-label="시뮬레이션 상태">
-          <span class="status-pulse" aria-hidden="true"></span>
-          <span id="topStatus">시뮬레이션 준비</span>
+        <div class="topbar-right">
+          <div class="mode-switch" role="group" aria-label="학습 / 실습 모드 전환">
+            <button id="modeLearnButton" type="button" class="mode-button active" aria-pressed="true">학습</button>
+            <button id="modeLiveButton" type="button" class="mode-button" aria-pressed="false">실습</button>
+          </div>
+          <div class="topbar-status" role="status" aria-label="시뮬레이션 상태">
+            <span class="status-pulse" aria-hidden="true"></span>
+            <span id="topStatus">시뮬레이션 준비</span>
+          </div>
         </div>
       </header>
 
-      <section class="learning-guide" aria-labelledby="learningGuideHeading">
-        <div class="learning-guide-intro">
-          <span class="guide-icon" aria-hidden="true">◎</span>
-          <div>
-            <p class="section-kicker">SELF-GUIDED LAB</p>
-            <h2 id="learningGuideHeading">처음이라면 이 순서로 학습하세요</h2>
-          </div>
-        </div>
-        <ol class="learning-guide-steps">
-          <li><span>1</span><strong>시나리오 선택</strong><small>공격 하나를 고릅니다</small></li>
-          <li><span>2</span><strong>5단계 관찰</strong><small>이전·다음으로 천천히 봅니다</small></li>
-          <li><span>3</span><strong>이해도 확인</strong><small>문제와 해설로 마무리합니다</small></li>
-        </ol>
-      </section>
-
+      <div id="learnView">
       <section class="scenario-hero" aria-labelledby="scenarioTitle">
         <div class="hero-copy">
           <div class="hero-label-row">
@@ -92,29 +66,6 @@
           </div>
         </div>
 
-        <div class="playback" role="group" aria-label="시뮬레이션 재생 제어">
-          <div class="playback-buttons">
-            <button id="resetButton" class="icon-button" type="button" aria-label="처음으로 되돌리기" title="처음으로">
-              <span aria-hidden="true">↺</span>
-            </button>
-            <button id="previousButton" class="icon-button" type="button" aria-label="이전 단계" title="이전 단계">
-              <span aria-hidden="true">←</span>
-            </button>
-            <button id="playButton" class="play-button" type="button" aria-pressed="false">
-              <span id="playIcon" aria-hidden="true">▶</span>
-              <span id="playLabel">시뮬레이션 시작</span>
-            </button>
-            <button id="nextButton" class="icon-button" type="button" aria-label="다음 단계" title="다음 단계">
-              <span aria-hidden="true">→</span>
-            </button>
-          </div>
-          <div class="speed-control" role="group" aria-label="재생 속도">
-            <span>자동 재생 속도</span>
-            <button type="button" data-speed="0.5">0.5×</button>
-            <button type="button" data-speed="1" class="active" aria-pressed="true">1×</button>
-            <button type="button" data-speed="2">2×</button>
-          </div>
-        </div>
       </section>
 
       <section class="panel story-timeline-panel" aria-labelledby="timelineHeading">
@@ -123,11 +74,26 @@
             <p class="section-kicker">01 · LEARNING PATH</p>
             <h3 id="timelineHeading">공격 진행 단계</h3>
           </div>
-          <span id="progressText" class="progress-text">1 / 5</span>
         </div>
         <div class="progress-track" aria-hidden="true"><span id="progressFill"></span></div>
         <ol id="phaseTimeline" class="phase-timeline" aria-label="공격 진행 단계"></ol>
       </section>
+
+      <div id="stepBar" class="step-bar" role="status" aria-label="현재 학습 단계">
+        <span id="stepBarLabel" class="step-bar-label">1단계 · 정상 상태</span>
+        <div class="step-bar-progress" aria-hidden="true"><span id="stepBarFill"></span></div>
+        <div class="step-bar-nav" role="group" aria-label="학습 단계 이동">
+          <button id="resetButton" class="icon-button" type="button" aria-label="처음으로 되돌리기" title="처음으로">
+            <span aria-hidden="true">↺</span>
+          </button>
+          <button id="previousButton" class="icon-button" type="button" aria-label="이전 단계" title="이전 단계">
+            <span aria-hidden="true">←</span>
+          </button>
+          <button id="nextButton" class="icon-button" type="button" aria-label="다음 단계" title="다음 단계">
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
 
       <section class="primary-grid">
         <article class="panel topology-panel" aria-labelledby="topologyHeading">
@@ -222,47 +188,10 @@
         <p id="signatureNote" class="signature-note" aria-live="polite"></p>
       </section>
 
-      <section id="checkpointSection" class="panel checkpoint-panel" aria-labelledby="checkpointHeading">
-        <div class="checkpoint-heading">
-          <div>
-            <p class="section-kicker">04 · CHECK YOUR UNDERSTANDING</p>
-            <h3 id="checkpointHeading">마지막으로 이해도를 확인해 보세요</h3>
-            <p>정답 여부와 관계없이 학습은 완료됩니다. 해설을 읽고 다시 도전할 수 있습니다.</p>
-          </div>
-          <span id="checkpointBadge" class="checkpoint-badge waiting">5단계 후 열림</span>
-        </div>
-
-        <div id="checkpointGate" class="checkpoint-gate">
-          <span aria-hidden="true">🔒</span>
-          <div><strong>아직 학습 중입니다</strong><p>공격 흐름을 5단계까지 확인하면 문제가 열립니다.</p></div>
-        </div>
-
-        <form id="checkpointForm" class="checkpoint-form" hidden>
-          <fieldset id="checkpointFieldset">
-            <legend id="checkpointQuestion">문제를 불러오는 중입니다.</legend>
-            <div id="checkpointOptions" class="checkpoint-options"></div>
-            <button id="checkpointSubmit" class="checkpoint-submit" type="submit" disabled>정답 확인</button>
-          </fieldset>
-        </form>
-
-        <div id="checkpointFeedback" class="checkpoint-feedback" role="status" aria-live="polite" hidden>
-          <div>
-            <strong id="checkpointFeedbackTitle"></strong>
-            <p id="checkpointFeedbackText"></p>
-          </div>
-          <div class="checkpoint-actions">
-            <button id="reviewPhaseButton" type="button">관련 단계 다시 보기</button>
-            <button id="retryCheckpointButton" type="button">다시 풀기</button>
-          </div>
-        </div>
-      </section>
-
-      <details class="advanced-lab">
-        <summary>
-          <span class="advanced-summary-icon" aria-hidden="true">＋</span>
+      <section class="advanced-lab">
+        <div class="advanced-lab-header">
           <span><small>선택 학습 · DEEP DIVE</small><strong>수치와 패킷으로 더 확인하기</strong></span>
-          <span class="advanced-summary-note">입문 학습 후 펼쳐 보세요</span>
-        </summary>
+        </div>
         <div class="advanced-lab-content">
           <section class="metrics-grid" aria-label="현재 시뮬레이션 수치 요약">
             <article class="metric-card">
@@ -316,7 +245,42 @@
             <div id="identityList" class="identity-list"></div>
           </article>
         </div>
-      </details>
+      </section>
+
+      <section id="checkpointSection" class="panel checkpoint-panel" aria-labelledby="checkpointHeading">
+        <div class="checkpoint-heading">
+          <div>
+            <p class="section-kicker">04 · CHECK YOUR UNDERSTANDING</p>
+            <h3 id="checkpointHeading">마지막으로 이해도를 확인해 보세요</h3>
+            <p>정답 여부와 관계없이 학습은 완료됩니다. 해설을 읽고 다시 도전할 수 있습니다.</p>
+          </div>
+          <span id="checkpointBadge" class="checkpoint-badge waiting">5단계 후 열림</span>
+        </div>
+
+        <div id="checkpointGate" class="checkpoint-gate">
+          <span aria-hidden="true">🔒</span>
+          <div><strong>아직 학습 중입니다</strong><p>공격 흐름을 5단계까지 확인하면 문제가 열립니다.</p></div>
+        </div>
+
+        <form id="checkpointForm" class="checkpoint-form" hidden>
+          <fieldset id="checkpointFieldset">
+            <legend id="checkpointQuestion">문제를 불러오는 중입니다.</legend>
+            <div id="checkpointOptions" class="checkpoint-options"></div>
+            <button id="checkpointSubmit" class="checkpoint-submit" type="submit" disabled>정답 확인</button>
+          </fieldset>
+        </form>
+
+        <div id="checkpointFeedback" class="checkpoint-feedback" role="status" aria-live="polite" hidden>
+          <div>
+            <strong id="checkpointFeedbackTitle"></strong>
+            <p id="checkpointFeedbackText"></p>
+          </div>
+          <div class="checkpoint-actions">
+            <button id="reviewPhaseButton" type="button">관련 단계 다시 보기</button>
+            <button id="retryCheckpointButton" type="button">다시 풀기</button>
+          </div>
+        </div>
+      </section>
 
       <details class="panel glossary-panel glossary-collapsible">
         <summary>
@@ -327,20 +291,76 @@
         <div id="glossaryList" class="glossary-list"></div>
       </details>
 
-      <section class="panel history-panel" aria-labelledby="historyHeading">
-        <div class="panel-heading compact">
+      </div><!-- /#learnView -->
+
+      <section id="liveView" class="live-view" hidden aria-label="실습 라이브 데이터">
+        <div class="live-banner">
+          <span class="live-banner-icon" aria-hidden="true">◉</span>
           <div>
-            <p class="section-kicker">LEARNING HISTORY</p>
-            <h3 id="historyHeading">최근 학습 기록</h3>
+            <p class="section-kicker">HANDS-ON · LIVE CAPTURE</p>
+            <h2>실습 모드 — 실제 수집 데이터</h2>
+            <p class="live-banner-sub">칼리에서 실행 중인 공격/탐지 결과를 <strong id="livePollInfo">3초</strong>마다 가져옵니다. 아직 데이터가 없으면 대기 상태로 표시됩니다.</p>
           </div>
-          <span class="local-data-label">이 브라우저에만 저장</span>
+          <span id="liveConnBadge" class="live-conn-badge" data-state="connecting">연결 확인 중…</span>
         </div>
-        <div id="historyList" class="history-list"></div>
+
+        <section class="panel live-status-panel" aria-labelledby="liveStatusHeading">
+          <div class="panel-heading compact">
+            <div>
+              <p class="section-kicker">A · ATTACK STATUS</p>
+              <h3 id="liveStatusHeading">공격 상태</h3>
+            </div>
+            <span id="liveStatusBadge" class="live-status-badge" data-state="idle">대기 중</span>
+          </div>
+          <div id="liveStatusEmpty" class="live-empty">아직 실행된 공격이 없습니다. 칼리에서 <code>et_sniffing_attack.sh</code> 를 실행하면 상태가 채워집니다.</div>
+          <dl id="liveStatusGrid" class="live-status-grid" hidden>
+            <div><dt>대상 SSID</dt><dd id="liveEssid">—</dd></div>
+            <div><dt>대상 BSSID</dt><dd id="liveBssid">—</dd></div>
+            <div><dt>채널</dt><dd id="liveChannel">—</dd></div>
+            <div><dt>인터페이스</dt><dd id="liveInterface">—</dd></div>
+            <div><dt>DoS 방식</dt><dd id="liveDos">—</dd></div>
+            <div><dt>경과 시간</dt><dd id="liveElapsed">—</dd></div>
+            <div><dt>접속 클라이언트</dt><dd id="liveClients">—</dd></div>
+            <div><dt>탈취 자격증명</dt><dd id="liveCreds">—</dd></div>
+          </dl>
+        </section>
+
+        <section class="live-grid">
+          <article class="panel live-events-panel" aria-labelledby="liveEventsHeading">
+            <div class="panel-heading compact">
+              <div>
+                <p class="section-kicker">B · EVENT FEED</p>
+                <h3 id="liveEventsHeading">실시간 이벤트</h3>
+              </div>
+              <span id="liveEventsCount" class="live-count">0건</span>
+            </div>
+            <div id="liveEventsEmpty" class="live-empty">이벤트 대기 중…</div>
+            <ol id="liveEventList" class="live-event-list" hidden aria-live="polite"></ol>
+          </article>
+
+          <article class="panel live-detect-panel" aria-labelledby="liveDetectHeading">
+            <div class="panel-heading compact">
+              <div>
+                <p class="section-kicker">C · DETECTION</p>
+                <h3 id="liveDetectHeading">Evil Twin 탐지 결과</h3>
+              </div>
+              <span id="liveDetectMeta" class="live-count">—</span>
+            </div>
+            <div id="liveDetectEmpty" class="live-empty">탐지 결과 없음. <code>et_detector.py capture.pcap --json /tmp/et_logs/detect.json</code> 실행 후 표시됩니다.</div>
+            <div id="liveDetectWrap" class="table-scroll" tabindex="0" hidden aria-label="탐지 결과 표">
+              <table class="live-detect-table">
+                <thead><tr><th scope="col">판정</th><th scope="col">SSID</th><th scope="col">의심 BSSID</th><th scope="col">CH</th><th scope="col">암호화</th><th scope="col">점수</th><th scope="col">신호</th></tr></thead>
+                <tbody id="liveDetectBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <p class="live-updated">마지막 갱신 <span id="liveUpdated">—</span></p>
       </section>
 
       <footer>
         <p>WFSAT 교육용 프로토타입 · 허가받은 격리 실습 환경에서만 보안 실습을 진행하세요.</p>
-        <button id="clearHistoryButton" type="button">학습 기록 초기화</button>
       </footer>
     </main>
   </div>

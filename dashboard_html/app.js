@@ -20,10 +20,9 @@
     topbarStatus: document.querySelector(".topbar-status"),
     resetButton: $("resetButton"),
     previousButton: $("previousButton"),
-    playButton: $("playButton"),
-    playIcon: $("playIcon"),
-    playLabel: $("playLabel"),
     nextButton: $("nextButton"),
+    stepBarLabel: $("stepBarLabel"),
+    stepBarFill: $("stepBarFill"),
     metricAps: $("metricAps"),
     metricApsDelta: $("metricApsDelta"),
     metricAlerts: $("metricAlerts"),
@@ -48,7 +47,6 @@
     defenseDescription: $("defenseDescription"),
     defenseBefore: $("defenseBefore"),
     defenseAfter: $("defenseAfter"),
-    progressText: $("progressText"),
     progressFill: $("progressFill"),
     phaseTimeline: $("phaseTimeline"),
     nodeLayer: $("nodeLayer"),
@@ -78,9 +76,6 @@
     checkpointFeedbackText: $("checkpointFeedbackText"),
     reviewPhaseButton: $("reviewPhaseButton"),
     retryCheckpointButton: $("retryCheckpointButton"),
-    advancedLab: document.querySelector(".advanced-lab"),
-    historyList: $("historyList"),
-    clearHistoryButton: $("clearHistoryButton"),
     toast: $("toast")
   };
 
@@ -292,8 +287,9 @@
   }
 
   function renderTimeline(scenario) {
-    elements.progressText.textContent = `${state.phaseIndex + 1} / ${scenario.phases.length}`;
-    elements.progressFill.style.width = `${(state.phaseIndex / (scenario.phases.length - 1)) * 100}%`;
+    const progressPct = `${(state.phaseIndex / (scenario.phases.length - 1)) * 100}%`;
+    elements.progressFill.style.width = progressPct;
+    elements.stepBarFill.style.width = progressPct;
     elements.phaseTimeline.innerHTML = scenario.phases.map((phase, index) => {
       const statusClass = index === state.phaseIndex ? "active" : index < state.phaseIndex ? "complete" : "";
       return `
@@ -320,13 +316,22 @@
     });
   }
 
-  function renderTopology(scenario, phase) {
-    elements.nodeLayer.innerHTML = scenario.nodes.map((node) => {
+  // 학습 화면의 토폴로지 무대(기본 컨텍스트). 실습 화면은 자체 무대를 넘겨 재사용한다.
+  const LEARN_TOPO = {
+    nodeLayer: elements.nodeLayer,
+    linkLayer: elements.linkLayer,
+    packetLayer: elements.packetLayer,
+    networkStage: elements.networkStage,
+    idPrefix: "topology-"
+  };
+
+  function renderTopology(scenario, phase, ctx = LEARN_TOPO) {
+    ctx.nodeLayer.innerHTML = scenario.nodes.map((node) => {
       const nodeState = phase.states[node.id] || "idle";
       return `
         <button
           type="button"
-          id="topology-${escapeHtml(node.id)}"
+          id="${ctx.idPrefix}${escapeHtml(node.id)}"
           class="topology-node ${escapeHtml(node.role)}"
           data-status="${escapeHtml(nodeState)}"
           title="${escapeHtml(node.label)} · ${escapeHtml(node.detail)} · ${stateLabels[nodeState]}"
@@ -340,17 +345,17 @@
       `;
     }).join("");
 
-    elements.nodeLayer.querySelectorAll(".topology-node").forEach((node) => {
+    ctx.nodeLayer.querySelectorAll(".topology-node").forEach((node) => {
       node.addEventListener("click", () => showToast(node.getAttribute("aria-label")));
     });
 
-    requestAnimationFrame(() => drawTopologyConnections(phase));
+    requestAnimationFrame(() => drawTopologyConnections(phase, ctx));
   }
 
-  function getNodeCenter(nodeId) {
-    const node = $(`topology-${nodeId}`);
+  function getNodeCenter(nodeId, ctx = LEARN_TOPO) {
+    const node = $(`${ctx.idPrefix}${nodeId}`);
     if (!node) return null;
-    const stageRect = elements.networkStage.getBoundingClientRect();
+    const stageRect = ctx.networkStage.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
     return {
       x: nodeRect.left - stageRect.left + nodeRect.width / 2,
@@ -358,13 +363,13 @@
     };
   }
 
-  function drawTopologyConnections(phase) {
-    elements.linkLayer.innerHTML = "";
-    elements.packetLayer.innerHTML = "";
+  function drawTopologyConnections(phase, ctx = LEARN_TOPO) {
+    ctx.linkLayer.innerHTML = "";
+    ctx.packetLayer.innerHTML = "";
 
     phase.links.forEach((connection) => {
-      const start = getNodeCenter(connection.from);
-      const end = getNodeCenter(connection.to);
+      const start = getNodeCenter(connection.from, ctx);
+      const end = getNodeCenter(connection.to, ctx);
       if (!start || !end) return;
       const deltaX = end.x - start.x;
       const deltaY = end.y - start.y;
@@ -377,23 +382,23 @@
       lineElement.style.top = `${start.y}px`;
       lineElement.style.width = `${distance}px`;
       lineElement.style.transform = `rotate(${angle}deg)`;
-      elements.linkLayer.appendChild(lineElement);
+      ctx.linkLayer.appendChild(lineElement);
 
       const labelElement = document.createElement("span");
       labelElement.className = "link-label";
       labelElement.textContent = connection.label;
       labelElement.style.left = `${start.x + deltaX * 0.5}px`;
       labelElement.style.top = `${start.y + deltaY * 0.5}px`;
-      elements.linkLayer.appendChild(labelElement);
+      ctx.linkLayer.appendChild(labelElement);
     });
 
-    animatePacket(phase.packet);
+    animatePacket(phase.packet, ctx);
   }
 
-  function animatePacket(packetData) {
+  function animatePacket(packetData, ctx = LEARN_TOPO) {
     if (!packetData) return;
-    const start = getNodeCenter(packetData.from);
-    const end = getNodeCenter(packetData.to);
+    const start = getNodeCenter(packetData.from, ctx);
+    const end = getNodeCenter(packetData.to, ctx);
     if (!start || !end) return;
 
     const token = document.createElement("span");
@@ -401,7 +406,7 @@
     token.textContent = packetData.label;
     token.style.left = "0";
     token.style.top = "0";
-    elements.packetLayer.appendChild(token);
+    ctx.packetLayer.appendChild(token);
 
     const startTransform = `translate(${start.x - 11}px, ${start.y - 11}px)`;
     const endTransform = `translate(${end.x - 11}px, ${end.y - 11}px)`;
@@ -784,37 +789,14 @@
     safeHistoryWrite([entry, ...history].slice(0, 6));
   }
 
-  function renderHistory() {
-    const history = safeHistoryRead();
-    if (!history.length) {
-      elements.historyList.innerHTML = '<div class="empty-history">아직 완료한 시나리오가 없습니다. 공격 흐름을 5단계까지 재생해 보세요.</div>';
-      return;
-    }
-
-    elements.historyList.innerHTML = history.slice(0, 6).map((entry) => {
-      const date = new Date(entry.timestamp);
-      const dateLabel = Number.isNaN(date.getTime()) ? "최근" : new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
-      const statusClass = entry.checkpointCorrect ? "checked" : entry.checkpointAnswered ? "retry" : "complete";
-      return `
-        <article class="history-card">
-          <span aria-hidden="true">${entry.icon || "✓"}</span>
-          <div><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(dateLabel)}</small></div>
-          <span class="history-score ${statusClass}">${escapeHtml(entry.score || "완료")}</span>
-        </article>
-      `;
-    }).join("");
-  }
-
+  // 단계 이동 버튼 상태와 상단바의 현재 단계 표시 갱신(재생/속도 버튼은 제거됨)
   function updatePlaybackUi() {
     const scenario = getScenario();
-    elements.playButton.setAttribute("aria-pressed", String(state.playing));
-    elements.playIcon.textContent = state.playing ? "Ⅱ" : "▶";
-    elements.playLabel.textContent = state.playing ? "일시정지" : state.phaseIndex === scenario.phases.length - 1 ? "처음부터 다시 보기" : "시뮬레이션 시작";
     elements.previousButton.disabled = state.phaseIndex === 0;
     elements.nextButton.disabled = state.phaseIndex === scenario.phases.length - 1;
+    elements.stepBarLabel.textContent = `${state.phaseIndex + 1}단계 · ${scenario.phases[state.phaseIndex].label}`;
     elements.topbarStatus.classList.toggle("running", state.playing);
-    if (state.playing) elements.topStatus.textContent = "시뮬레이션 재생 중";
-    else if (state.phaseIndex === scenario.phases.length - 1) elements.topStatus.textContent = "학습 단계 완료";
+    if (state.phaseIndex === scenario.phases.length - 1) elements.topStatus.textContent = "학습 단계 완료";
     else elements.topStatus.textContent = `${state.phaseIndex + 1}단계 · ${scenario.phases[state.phaseIndex].label}`;
   }
 
@@ -836,7 +818,6 @@
     renderIdentityList(scenario, phase);
     renderGlossary(scenario);
     renderCheckpoint(scenario);
-    renderHistory();
     updatePlaybackUi();
   }
 
@@ -863,47 +844,11 @@
     showToast(`${getScenario().title} 시나리오를 불러왔습니다.`);
   }
 
-  function startPlayback() {
-    const scenario = getScenario();
-    if (state.phaseIndex === scenario.phases.length - 1) {
-      state.phaseIndex = 0;
-      state.checkpointSelection = null;
-      state.checkpointResult = null;
-    }
-    clearInterval(state.timer);
-    state.playing = true;
-    updatePlaybackUi();
-    render({ recordCompletion: false });
-    state.timer = window.setInterval(() => {
-      if (state.phaseIndex >= getScenario().phases.length - 1) {
-        stopPlayback();
-        return;
-      }
-      setPhase(state.phaseIndex + 1);
-    }, 2500 / state.speed);
-  }
-
   function stopPlayback(update = true) {
     clearInterval(state.timer);
     state.timer = null;
     state.playing = false;
     if (update) updatePlaybackUi();
-  }
-
-  function togglePlayback() {
-    if (state.playing) stopPlayback();
-    else startPlayback();
-  }
-
-  function updateSpeed(speed) {
-    state.speed = speed;
-    document.querySelectorAll("[data-speed]").forEach((button) => {
-      const active = Number(button.dataset.speed) === speed;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
-    if (state.playing) startPlayback();
-    else drawTopologyConnections(getPhase());
   }
 
   function showToast(message) {
@@ -913,7 +858,6 @@
     state.toastTimer = window.setTimeout(() => elements.toast.classList.remove("visible"), 2600);
   }
 
-  elements.playButton.addEventListener("click", togglePlayback);
   elements.previousButton.addEventListener("click", () => {
     stopPlayback();
     setPhase(state.phaseIndex - 1, { recordCompletion: false });
@@ -925,20 +869,8 @@
   elements.resetButton.addEventListener("click", () => {
     stopPlayback();
     setPhase(0, { recordCompletion: false });
-    showToast("시뮬레이션을 처음 단계로 되돌렸습니다.");
+    showToast("처음 단계로 되돌렸습니다.");
   });
-  document.querySelectorAll("[data-speed]").forEach((button) => {
-    button.addEventListener("click", () => updateSpeed(Number(button.dataset.speed)));
-  });
-  elements.clearHistoryButton.addEventListener("click", () => {
-    safeHistoryWrite([]);
-    state.checkpointSelection = null;
-    state.checkpointResult = null;
-    state.checkpointAttempts = 0;
-    render({ recordCompletion: false });
-    showToast("이 브라우저의 학습 기록을 초기화했습니다.");
-  });
-
   elements.checkpointOptions.addEventListener("change", (event) => {
     const input = event.target.closest('input[name="checkpointAnswer"]');
     if (!input) return;
@@ -956,7 +888,6 @@
     saveCheckpointResult(scenario, state.checkpointResult);
     renderScenarioNavigation();
     renderCheckpoint(scenario);
-    renderHistory();
     showToast(state.checkpointResult ? "정답입니다. 이해도 확인을 완료했습니다." : "해설을 확인한 뒤 다시 도전해 보세요.");
   });
 
@@ -976,18 +907,13 @@
     document.querySelector(".primary-grid").scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   });
 
-  elements.advancedLab.addEventListener("toggle", () => {
-    if (elements.advancedLab.open) requestAnimationFrame(() => drawTrafficChart(getScenario(), getPhase()));
-  });
-
   window.addEventListener("keydown", (event) => {
     const target = event.target;
-    const interactive = target.closest("button, input, select, textarea, summary, a");
-    if (interactive) return;
-    if (event.code === "Space") {
-      event.preventDefault();
-      togglePlayback();
-    } else if (event.key === "ArrowRight") {
+    // 입력 필드(체크포인트 라디오·텍스트 등)에서는 방향키 기본 동작을 방해하지 않음.
+    // 버튼·링크에 포커스가 있어도 방향키로 단계 이동이 되도록 허용한다.
+    const typingField = target.closest && target.closest("input, select, textarea, [contenteditable='true']");
+    if (typingField) return;
+    if (event.key === "ArrowRight") {
       stopPlayback();
       setPhase(state.phaseIndex + 1);
     } else if (event.key === "ArrowLeft") {
@@ -1008,4 +934,341 @@
   });
 
   render({ recordCompletion: false });
+
+  /* =====================================================================
+   * 실습(라이브) 모드 — bridge.py 의 /api/state 를 폴링해 실제 수집 데이터를 표시.
+   * 학습 모드(시나리오 재생)와 완전히 분리되어 있으며, 데이터가 없어도
+   * 오류 없이 "대기 상태" 로만 표시된다.
+   * ===================================================================== */
+  (function initLiveMode() {
+    const LIVE_ENDPOINT = "/api/state";
+    const POLL_MS = 3000;
+
+    const live = {
+      learnView: $("learnView"),
+      liveView: $("liveView"),
+      learnButton: $("modeLearnButton"),
+      liveButton: $("modeLiveButton"),
+      connBadge: $("liveConnBadge"),
+      statusBadge: $("liveStatusBadge"),
+      statusEmpty: $("liveStatusEmpty"),
+      statusGrid: $("liveStatusGrid"),
+      essid: $("liveEssid"),
+      bssid: $("liveBssid"),
+      channel: $("liveChannel"),
+      iface: $("liveInterface"),
+      dos: $("liveDos"),
+      elapsed: $("liveElapsed"),
+      clients: $("liveClients"),
+      creds: $("liveCreds"),
+      eventsEmpty: $("liveEventsEmpty"),
+      eventList: $("liveEventList"),
+      eventsCount: $("liveEventsCount"),
+      detectEmpty: $("liveDetectEmpty"),
+      detectWrap: $("liveDetectWrap"),
+      detectBody: $("liveDetectBody"),
+      detectMeta: $("liveDetectMeta"),
+      updated: $("liveUpdated"),
+      flowBadge: $("liveFlowBadge"),
+      flowFocus: $("liveFlowFocus"),
+      flowIndex: $("liveFlowIndex"),
+      flowKicker: $("liveFlowKicker"),
+      flowTitle: $("liveFlowTitle"),
+      flowDesc: $("liveFlowDesc")
+    };
+
+    // 실습 토폴로지 무대(학습과 동일한 렌더 함수를 자체 무대로 재사용)
+    const LIVE_TOPO = {
+      nodeLayer: $("liveNodeLayer"),
+      linkLayer: $("liveLinkLayer"),
+      packetLayer: $("livePacketLayer"),
+      networkStage: $("liveNetworkStage"),
+      idPrefix: "livetopology-"
+    };
+
+    // 필수 요소가 없으면(구버전 HTML 등) 조용히 비활성화
+    if (!live.liveView || !live.liveButton || !live.learnButton) return;
+
+    let pollTimer = null;
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    function formatElapsed(sec) {
+      const n = Number(sec);
+      if (!Number.isFinite(n) || n < 0) return "—";
+      const m = Math.floor(n / 60);
+      const s = n % 60;
+      return m > 0 ? `${m}분 ${s}초` : `${s}초`;
+    }
+
+    const EVENT_META = {
+      attack_start: { label: "공격 시작", tone: "warning" },
+      client_connected: { label: "클라이언트 접속", tone: "warning" },
+      credential_captured: { label: "자격증명 탈취", tone: "attack" },
+      attack_stop: { label: "공격 종료", tone: "neutral" }
+    };
+
+    function eventDetail(ev) {
+      const d = ev && ev.data ? ev.data : {};
+      switch (ev && ev.type) {
+        case "attack_start":
+          return `대상 ${escapeHtml(d.essid || "?")} · CH ${escapeHtml(d.channel)} · ${escapeHtml(d.dos_method || "-")}`;
+        case "client_connected":
+          return `IP ${escapeHtml(d.ip || "?")} · MAC ${escapeHtml(d.mac || "?")}`;
+        case "credential_captured":
+          return `${escapeHtml(d.credential_type || "cred")}: ${escapeHtml(d.value || "")}`;
+        case "attack_stop":
+          return `경과 ${escapeHtml(d.elapsed_seconds)}s · 클라이언트 ${escapeHtml(d.connected_clients)} · 자격증명 ${escapeHtml(d.credentials_captured)}`;
+        default:
+          return "";
+      }
+    }
+
+    const DETECT_TONE = { "정상": "normal", "의심": "warning", "공격중": "attack" };
+
+    function setConn(stateName, text) {
+      live.connBadge.dataset.state = stateName;
+      live.connBadge.textContent = text;
+    }
+
+    function renderStatus(summary) {
+      // summary 가 null(공격 전) 이면 대기 상태만 표시
+      if (!summary) {
+        live.statusEmpty.hidden = false;
+        live.statusGrid.hidden = true;
+        live.statusBadge.dataset.state = "idle";
+        live.statusBadge.textContent = "대기 중";
+        return;
+      }
+      live.statusEmpty.hidden = true;
+      live.statusGrid.hidden = false;
+      const running = summary.status === "running";
+      live.statusBadge.dataset.state = running ? "running" : "stopped";
+      live.statusBadge.textContent = running ? "공격 진행 중" : "종료됨";
+      live.essid.textContent = summary.essid || "—";
+      live.bssid.textContent = summary.bssid || "—";
+      live.channel.textContent = (summary.channel != null && summary.channel !== "") ? summary.channel : "—";
+      live.iface.textContent = summary.interface || "—";
+      live.dos.textContent = summary.dos_method || "—";
+      live.elapsed.textContent = formatElapsed(summary.elapsed_seconds);
+      live.clients.textContent = summary.connected_clients != null ? summary.connected_clients : "0";
+      live.creds.textContent = summary.credentials_captured != null ? summary.credentials_captured : "0";
+    }
+
+    function renderEvents(events) {
+      const list = Array.isArray(events) ? events : [];
+      live.eventsCount.textContent = `${list.length}건`;
+      if (!list.length) {
+        live.eventsEmpty.hidden = false;
+        live.eventList.hidden = true;
+        live.eventList.innerHTML = "";
+        return;
+      }
+      live.eventsEmpty.hidden = true;
+      live.eventList.hidden = false;
+      // 최신이 위로 오도록 역순 표시
+      live.eventList.innerHTML = list.slice().reverse().map((ev) => {
+        const meta = EVENT_META[ev && ev.type] || { label: (ev && ev.type) || "event", tone: "neutral" };
+        const ts = (ev && ev.timestamp ? String(ev.timestamp).replace("T", " ").replace("Z", "") : "");
+        return `<li class="live-event tone-${meta.tone}">
+          <span class="live-event-time">${escapeHtml(ts)}</span>
+          <span class="live-event-type">${escapeHtml(meta.label)}</span>
+          <span class="live-event-detail">${eventDetail(ev)}</span>
+        </li>`;
+      }).join("");
+    }
+
+    function renderDetections(detections) {
+      const rows = detections && Array.isArray(detections.ap_table) ? detections.ap_table : [];
+      const findings = detections && Array.isArray(detections.findings) ? detections.findings : [];
+      if (!rows.length) {
+        live.detectEmpty.hidden = false;
+        live.detectWrap.hidden = true;
+        live.detectBody.innerHTML = "";
+        live.detectMeta.textContent = "—";
+        return;
+      }
+      live.detectEmpty.hidden = true;
+      live.detectWrap.hidden = false;
+      live.detectMeta.textContent = `AP ${rows.length} · 탐지 ${findings.length}`;
+      live.detectBody.innerHTML = rows.map((ap) => {
+        const tone = DETECT_TONE[ap.status] || "normal";
+        const sig = ap.signals || {};
+        const flags = [
+          sig.S1_zero_width ? "S1" : null,
+          sig.S2_twin_bssid ? "S2" : null,
+          sig.S3_downgrade ? "S3" : null
+        ].filter(Boolean).join(" ") || "—";
+        const score = (typeof ap.score === "number") ? ap.score.toFixed(2) : (ap.score || "—");
+        return `<tr class="detect-tone-${tone}">
+          <td><span class="detect-verdict detect-tone-${tone}">${escapeHtml(ap.status || "?")}</span></td>
+          <td>${escapeHtml(ap.ssid || "&lt;hidden&gt;")}</td>
+          <td class="mono">${escapeHtml(ap.bssid || "—")}</td>
+          <td>${escapeHtml(ap.channel != null ? ap.channel : "—")}</td>
+          <td>${escapeHtml(ap.enc || "—")}</td>
+          <td>${escapeHtml(score)}</td>
+          <td class="mono">${escapeHtml(flags)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    // 실제 상태로부터 토폴로지 장면을 구성한다.
+    // 기본은 정상(클라이언트+진짜 AP)이며, Evil Twin 이 탐지되거나 공격이
+    // 진행 중이면 학습 3단계처럼 공격자 노드와 공격 링크가 나타난다.
+    function buildFlow(data) {
+      const summary = data && data.summary ? data.summary : null;
+      const detections = data && data.detections ? data.detections : { findings: [] };
+      const events = Array.isArray(data && data.events) ? data.events : [];
+      const findings = Array.isArray(detections.findings) ? detections.findings : [];
+
+      const running = !!(summary && summary.status === "running");
+      const hasFinding = findings.length > 0;
+      const underAttack = hasFinding || running;
+      const credsCaptured = (summary && Number(summary.credentials_captured) > 0)
+        || events.some((e) => e && e.type === "credential_captured");
+
+      const f0 = findings[0] || {};
+      const essid = (summary && summary.essid) || f0.ssid || "대상 AP";
+      const channel = (summary && summary.channel != null && summary.channel !== "")
+        ? summary.channel : (f0.channel != null ? f0.channel : "?");
+      const iface = (summary && summary.interface) || "wlan";
+      const suspectBssid = f0.suspect_bssid || (summary && summary.bssid) || "위조 AP";
+      const clientEvt = events.slice().reverse().find((e) => e && e.type === "client_connected");
+      const clientMac = (clientEvt && clientEvt.data && clientEvt.data.mac) || "클라이언트";
+
+      const client = { id: "client", role: "client", icon: "💻", label: "정상 클라이언트", detail: clientMac };
+      const realAp = { id: "real-ap", role: "real-ap", icon: "📡", label: "진짜 AP", detail: `${essid} · CH ${channel}` };
+      const attacker = { id: "attacker", role: "attacker", icon: "⚠️", label: "Evil Twin", detail: suspectBssid };
+      const sensor = { id: "sensor", role: "sensor", icon: "🔎", label: "WFSAT 센서", detail: iface };
+
+      if (!underAttack) {
+        return {
+          nodes: [client, realAp],
+          phase: {
+            states: { client: "normal", "real-ap": "normal" },
+            links: [{ from: "real-ap", to: "client", type: "normal", label: "정상 연결" }],
+            packet: { from: "real-ap", to: "client", label: "DATA", tone: "normal" }
+          },
+          badge: "정상 상태", index: "01", kicker: "NORMAL STATE",
+          title: "정상 통신 중입니다",
+          desc: "아직 Evil Twin 공격이 탐지되지 않았습니다. 공격이 시작되면 이 화면이 자동으로 바뀝니다.",
+          focus: "정상 클라이언트와 진짜 AP만 통신하는 평상시 모습입니다."
+        };
+      }
+
+      return {
+        nodes: [client, realAp, attacker, sensor],
+        phase: {
+          states: {
+            client: credsCaptured ? "offline" : "warning",
+            "real-ap": "normal",
+            attacker: "danger",
+            sensor: "defense"
+          },
+          links: [
+            { from: "real-ap", to: "client", type: "inactive", label: "연결 약화" },
+            { from: "attacker", to: "client", type: "attack", label: credsCaptured ? "자격증명 탈취" : "위조 AP 유인" },
+            { from: "sensor", to: "attacker", type: "warning", label: "공격 탐지" }
+          ],
+          packet: { from: "attacker", to: "client", label: credsCaptured ? "CRED" : "EVIL TWIN", tone: "attack" }
+        },
+        badge: credsCaptured ? "자격증명 탈취됨" : "공격 탐지됨",
+        index: credsCaptured ? "04" : "03",
+        kicker: "EVIL TWIN DETECTED",
+        title: credsCaptured ? "가짜 AP가 자격증명을 가로챕니다" : "Evil Twin이 클라이언트를 유인합니다",
+        desc: `진짜 AP(${essid})를 사칭한 위조 AP(${suspectBssid})가 탐지되었습니다. 클라이언트가 가짜 AP에 연결되면 트래픽이 공격자를 거쳐 흐릅니다.`,
+        focus: credsCaptured
+          ? "가짜 AP를 거친 트래픽에서 자격증명이 수집되고 있습니다."
+          : "공격자가 진짜 AP인 척 클라이언트를 자기 쪽으로 끌어들이는 중입니다."
+      };
+    }
+
+    let lastFlowPhase = null;
+
+    function renderFlow(data) {
+      const flow = buildFlow(data);
+      live.flowBadge.textContent = flow.badge;
+      live.flowFocus.textContent = flow.focus;
+      live.flowIndex.textContent = flow.index;
+      live.flowKicker.textContent = flow.kicker;
+      live.flowTitle.textContent = flow.title;
+      live.flowDesc.textContent = flow.desc;
+      lastFlowPhase = flow.phase;
+      renderTopology({ nodes: flow.nodes }, flow.phase, LIVE_TOPO);
+    }
+
+    let lastData = null;
+
+    function renderLive(data) {
+      lastData = data;
+      renderFlow(data);
+      renderStatus(data && data.summary ? data.summary : null);
+      renderEvents(data ? data.events : []);
+      renderDetections(data ? data.detections : null);
+      live.updated.textContent = new Date().toLocaleTimeString();
+    }
+
+    function showLiveDisconnected(message) {
+      setConn("error", message);
+      // 연결이 끊겨도 마지막으로 그려진 값은 유지(화면이 비워지지 않도록)
+    }
+
+    async function pollLive() {
+      try {
+        const res = await fetch(LIVE_ENDPOINT, { cache: "no-store" });
+        if (!res.ok) { showLiveDisconnected(`서버 응답 오류 (${res.status})`); return; }
+        const data = await res.json();
+        setConn("ok", "연결됨");
+        renderLive(data);
+      } catch (err) {
+        showLiveDisconnected("브리지 서버에 연결할 수 없습니다");
+      }
+    }
+
+    function startLivePolling() {
+      stopLivePolling();
+      setConn("connecting", "연결 확인 중…");
+      pollLive();
+      pollTimer = window.setInterval(pollLive, POLL_MS);
+    }
+
+    function stopLivePolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    function setMode(mode) {
+      const liveOn = mode === "live";
+      if (liveOn) stopPlayback(false); // 시나리오 자동재생이 돌고 있으면 멈춤
+      live.learnView.hidden = liveOn;
+      live.liveView.hidden = !liveOn;
+      live.learnButton.classList.toggle("active", !liveOn);
+      live.liveButton.classList.toggle("active", liveOn);
+      live.learnButton.setAttribute("aria-pressed", String(!liveOn));
+      live.liveButton.setAttribute("aria-pressed", String(liveOn));
+      if (liveOn) startLivePolling();
+      else stopLivePolling();
+    }
+
+    live.learnButton.addEventListener("click", () => setMode("learn"));
+    live.liveButton.addEventListener("click", () => setMode("live"));
+
+    // 탭이 백그라운드일 때는 폴링을 멈춰 불필요한 요청을 줄임
+    document.addEventListener("visibilitychange", () => {
+      if (live.liveView.hidden) return; // 실습 모드가 아닐 때는 무시
+      if (document.hidden) stopLivePolling();
+      else startLivePolling();
+    });
+
+    // 창 크기가 바뀌면 실습 토폴로지의 연결선을 다시 그린다
+    let liveResizeTimer = null;
+    window.addEventListener("resize", () => {
+      if (live.liveView.hidden || !lastFlowPhase) return;
+      clearTimeout(liveResizeTimer);
+      liveResizeTimer = window.setTimeout(() => drawTopologyConnections(lastFlowPhase, LIVE_TOPO), 140);
+    });
+  })();
 })();
