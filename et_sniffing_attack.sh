@@ -1459,10 +1459,17 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
-if [ -z "${interface}" ] || [ -z "${internet_interface}" ] || [ -z "${bssid}" ] || [ -z "${essid}" ] || [ -z "${channel}" ]; then
-	echo "[!] Required config values are missing in: ${_config_file}" >&2
+_missing=""
+for _req in interface internet_interface bssid essid channel; do
+	if [ -z "${!_req}" ]; then
+		_missing="${_missing}${_missing:+, }${_req}"
+	fi
+done
+if [ -n "${_missing}" ]; then
+	echo "[!] Missing config values in ${_config_file}: ${_missing}" >&2
 	echo "    Required: interface, internet_interface, bssid, essid, channel" >&2
-	echo "    (Run et_scan.sh first to auto-fill these values)" >&2
+	echo "    (Run et_scan.sh first to auto-fill these values." >&2
+	echo "     Note: internet_interface is your uplink NIC, e.g. eth0 — set it manually if not detected.)" >&2
 	exit 1
 fi
 

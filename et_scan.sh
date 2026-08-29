@@ -318,6 +318,20 @@ update_config_value "essid"          "${sel_essid}"
 update_config_value "channel"        "${sel_channel}"
 update_config_value "phy_interface"  "${phy_interface}"
 
+# Auto-detect the internet-facing uplink (default-route interface) if not
+# already set. This is the NIC that shares internet to the fake AP (e.g. eth0),
+# and is distinct from the monitor-mode wireless interface above.
+if [ -z "${internet_interface}" ]; then
+    _inet_iface=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
+    if [ -n "${_inet_iface}" ] && [ "${_inet_iface}" != "${interface}" ]; then
+        update_config_value "internet_interface" "${_inet_iface}"
+        echo "    internet_interface auto-detected: ${_inet_iface}"
+    else
+        echo "[!] Could not auto-detect internet_interface (uplink NIC)."
+        echo "    Set it manually in ${_config_file}, e.g. internet_interface=\"eth0\""
+    fi
+fi
+
 echo "[+] Config updated successfully."
 echo
 echo "    Run  sudo ./et_sniffing_attack.sh  to start the attack."
