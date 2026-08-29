@@ -203,28 +203,28 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     if not os.path.isdir(STATIC_DIR):
-        sys.stderr.write("[!] 정적 폴더가 없습니다: %s\n" % STATIC_DIR)
-        sys.stderr.write("    WFSAT_STATIC_DIR 로 dashboard_html 경로를 지정하세요.\n")
+        sys.stderr.write("[!] Static folder not found: %s\n" % STATIC_DIR)
+        sys.stderr.write("    Set WFSAT_STATIC_DIR to the dashboard_html path.\n")
         return 1
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print("=" * 60)
-    print(" WFSAT 대시보드 브리지 서버")
+    print(" WFSAT Dashboard Bridge Server")
     print("=" * 60)
-    print(" 대시보드   : http://%s:%d/  (실습 탭에서 라이브 데이터 표시)"
+    print(" Dashboard  : http://%s:%d/  (live data in the Practice tab)"
           % ("localhost" if HOST == "0.0.0.0" else HOST, PORT))
-    print(" 웹훅 수신  : POST http://<이 호스트 IP>:%d/api/events" % PORT)
-    print("              → et_config.conf 의 dashboard_url 에 지정")
-    print(" 상태 API   : GET  /api/state")
-    print(" 로그 폴더  : %s" % LOG_DIR)
-    print(" 탐지 JSON  : %s" % DETECT_JSON)
-    print(" 정적 폴더  : %s" % STATIC_DIR)
+    print(" Webhook    : POST http://<this host IP>:%d/api/events" % PORT)
+    print("              -> set as dashboard_url in et_config.conf")
+    print(" State API  : GET  /api/state")
+    print(" Log dir    : %s" % LOG_DIR)
+    print(" Detect JSON: %s" % DETECT_JSON)
+    print(" Static dir : %s" % STATIC_DIR)
     print("-" * 60)
-    print(" Ctrl+C 로 종료")
+    print(" Press Ctrl+C to stop")
     print("=" * 60)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[+] 종료합니다.")
+        print("\n[+] Shutting down.")
         server.shutdown()
     return 0
 
