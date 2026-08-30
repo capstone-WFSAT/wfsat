@@ -30,7 +30,8 @@ LAB_NET="${LAB_NET:-192.168.50.0}"       # NAT 소스 대역
 LAB_UPLINK="${LAB_UPLINK:-}"             # 인터넷 공유용 업링크(비우면 기본 라우트 자동)
 LAB_NAT="${LAB_NAT:-1}"                  # 1=인터넷 공유(NAT) 켜기, 0=끄기
 LAB_OPEN="${LAB_OPEN:-0}"                # 1=오픈 AP, 0=WPA2
-LAB_COUNTRY="${LAB_COUNTRY:-00}"
+LAB_COUNTRY="${LAB_COUNTRY:-}"           # 국가코드(예: KR, US). 비우면 생략(2.4GHz 1~11 채널은 불필요)
+                                         # 주의: '00'은 일부 hostapd 버전에서 거부됨 -> 비워두는 게 안전
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _config_file="${_script_dir}/et_config.conf"
@@ -47,7 +48,7 @@ _nm_was_managed=0
 
 # --- Root 확인 ------------------------------------------------------
 if [ "$(id -u)" -ne 0 ]; then
-	echo "[!] Root 권한이 필요합니다. sudo로 실행하세요." >&2
+	echo "[!] Root privileges required. Run with sudo." >&2
 	exit 1
 fi
 
@@ -57,8 +58,8 @@ for _bin in hostapd dnsmasq iw ip; do
 	command -v "${_bin}" > /dev/null 2>&1 || _missing_deps="${_missing_deps} ${_bin}"
 done
 if [ -n "${_missing_deps}" ]; then
-	echo "[!] 다음 도구가 없습니다:${_missing_deps}" >&2
-	echo "    설치: sudo apt update && sudo apt install -y hostapd dnsmasq iw" >&2
+	echo "[!] Missing required tools:${_missing_deps}" >&2
+	echo "    Install: sudo apt update && sudo apt install -y hostapd dnsmasq iw" >&2
 	exit 1
 fi
 
@@ -80,20 +81,20 @@ if [ -z "${LAB_IFACE}" ]; then
 fi
 
 if [ -z "${LAB_IFACE}" ]; then
-	echo "[!] 사용할 두 번째 WiFi 어댑터를 찾지 못했습니다." >&2
-	echo "    공격용(${_attack_iface:-미설정})과 별개의 어댑터가 필요합니다." >&2
-	echo "    LAB_IFACE=wlanX 로 직접 지정하세요." >&2
+	echo "[!] No second WiFi adapter found for the victim AP." >&2
+	echo "    A separate adapter from the attack one (${_attack_iface:-unset}) is required." >&2
+	echo "    Set it explicitly with LAB_IFACE=wlanX." >&2
 	exit 1
 fi
 
 if [ "${LAB_IFACE}" = "${_attack_iface}" ]; then
-	echo "[!] LAB_IFACE(${LAB_IFACE})가 공격용 인터페이스와 같습니다." >&2
-	echo "    피해 AP와 공격은 서로 다른 어댑터를 써야 합니다." >&2
+	echo "[!] LAB_IFACE (${LAB_IFACE}) is the same as the attack interface." >&2
+	echo "    The victim AP and the attack must use different adapters." >&2
 	exit 1
 fi
 
 if [ "${LAB_OPEN}" != "1" ] && [ "${#LAB_PASS}" -lt 8 ]; then
-	echo "[!] WPA2 암호(LAB_PASS)는 8자 이상이어야 합니다." >&2
+	echo "[!] WPA2 passphrase (LAB_PASS) must be at least 8 characters." >&2
 	exit 1
 fi
 
@@ -101,7 +102,7 @@ fi
 if [ "${LAB_NAT}" = "1" ] && [ -z "${LAB_UPLINK}" ]; then
 	LAB_UPLINK=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
 	if [ -z "${LAB_UPLINK}" ] || [ "${LAB_UPLINK}" = "${LAB_IFACE}" ]; then
-		echo "[!] 업링크를 자동 감지하지 못해 인터넷 공유(NAT)를 끕니다."
+		echo "[!] Could not auto-detect an uplink; disabling internet sharing (NAT)."
 		LAB_NAT=0
 	fi
 fi
@@ -111,7 +112,7 @@ fi
 # ============================================================
 function _cleanup() {
 	echo
-	echo "[*] 피해 AP를 정리하는 중..."
+	echo "[*] Cleaning up victim AP..."
 
 	[ -n "${_hostapd_pid}" ] && kill "${_hostapd_pid}" 2>/dev/null
 	[ -n "${_dnsmasq_pid}" ] && kill "${_dnsmasq_pid}" 2>/dev/null
@@ -135,27 +136,27 @@ function _cleanup() {
 		nmcli dev set "${LAB_IFACE}" managed yes 2>/dev/null
 	fi
 
-	echo "[+] 정리 완료."
+	echo "[+] Cleanup complete."
 }
 trap _cleanup EXIT INT TERM
 
 # ============================================================
 # 인터페이스 준비
 # ============================================================
-echo "[*] 피해 AP 설정"
+echo "[*] Victim AP configuration"
 echo "    ESSID     : ${LAB_ESSID}"
 if [ "${LAB_OPEN}" = "1" ]; then
-	echo "    보안      : OPEN (오픈)"
+	echo "    Security  : OPEN"
 else
-	echo "    보안      : WPA2 (암호: ${LAB_PASS})"
+	echo "    Security  : WPA2 (passphrase: ${LAB_PASS})"
 fi
-echo "    채널      : ${LAB_CHANNEL}"
-echo "    인터페이스: ${LAB_IFACE}"
-echo "    게이트웨이: ${LAB_AP_IP}/${LAB_CIDR}"
+echo "    Channel   : ${LAB_CHANNEL}"
+echo "    Interface : ${LAB_IFACE}"
+echo "    Gateway   : ${LAB_AP_IP}/${LAB_CIDR}"
 if [ "${LAB_NAT}" = "1" ]; then
-	echo "    인터넷공유: ${LAB_IFACE} -> ${LAB_UPLINK} (NAT)"
+	echo "    Internet  : ${LAB_IFACE} -> ${LAB_UPLINK} (NAT)"
 else
-	echo "    인터넷공유: 없음"
+	echo "    Internet  : none"
 fi
 echo
 
@@ -188,7 +189,10 @@ ip link set "${LAB_IFACE}" up 2>/dev/null
 	echo "ssid=${LAB_ESSID}"
 	echo "hw_mode=g"
 	echo "channel=${LAB_CHANNEL}"
-	echo "country_code=${LAB_COUNTRY}"
+	# 유효한 국가코드가 지정된 경우에만 기록('00'은 hostapd가 거부하므로 제외)
+	if [ -n "${LAB_COUNTRY}" ] && [ "${LAB_COUNTRY}" != "00" ]; then
+		echo "country_code=${LAB_COUNTRY}"
+	fi
 	echo "ignore_broadcast_ssid=0"
 	echo "auth_algs=1"
 	if [ "${LAB_OPEN}" != "1" ]; then
@@ -231,27 +235,27 @@ fi
 # ============================================================
 # hostapd / dnsmasq 실행
 # ============================================================
-echo "[*] hostapd 실행 중..."
+echo "[*] Starting hostapd..."
 hostapd "${_hostapd_conf}" > "${_workdir}/hostapd.log" 2>&1 &
 _hostapd_pid=$!
 
 sleep 2
 if ! kill -0 "${_hostapd_pid}" 2>/dev/null; then
-	echo "[!] hostapd 실행에 실패했습니다. 로그:" >&2
+	echo "[!] hostapd failed to start. Log:" >&2
 	sed 's/^/    /' "${_workdir}/hostapd.log" >&2
 	exit 1
 fi
 
-echo "[*] dnsmasq(DHCP) 실행 중..."
+echo "[*] Starting dnsmasq (DHCP)..."
 # 시스템 dnsmasq 서비스와 충돌하지 않게 단독 실행
 dnsmasq --conf-file="${_dnsmasq_conf}" --no-daemon > "${_workdir}/dnsmasq.log" 2>&1 &
 _dnsmasq_pid=$!
 
 sleep 1
 if ! kill -0 "${_dnsmasq_pid}" 2>/dev/null; then
-	echo "[!] dnsmasq 실행에 실패했습니다. 로그:" >&2
+	echo "[!] dnsmasq failed to start. Log:" >&2
 	sed 's/^/    /' "${_workdir}/dnsmasq.log" >&2
-	echo "    (시스템 dnsmasq 서비스가 떠 있으면: sudo systemctl stop dnsmasq)" >&2
+	echo "    (If the system dnsmasq service is running: sudo systemctl stop dnsmasq)" >&2
 	exit 1
 fi
 
@@ -259,19 +263,19 @@ _bssid=$(cat "/sys/class/net/${LAB_IFACE}/address" 2>/dev/null)
 
 echo
 echo "================================================================"
-echo " [+] 피해 AP 가동 중"
+echo " [+] Victim AP is up"
 echo "     ESSID   : ${LAB_ESSID}"
 echo "     BSSID   : ${_bssid}"
-echo "     채널    : ${LAB_CHANNEL}"
-echo "     DHCP    : ${LAB_DHCP_START} ~ ${LAB_DHCP_END}"
+echo "     Channel : ${LAB_CHANNEL}"
+echo "     DHCP    : ${LAB_DHCP_START} - ${LAB_DHCP_END}"
 echo "================================================================"
 echo
-echo " 다음 순서로 진행하세요:"
-echo "   1) 피해자 단말(헌 폰 등)을 '${LAB_ESSID}' 에 연결"
-echo "   2) 다른 터미널에서:  sudo bash et_scan.sh   -> '${LAB_ESSID}' 선택"
-echo "   3)                    sudo bash et_sniffing_attack.sh"
+echo " Next steps:"
+echo "   1) Connect a victim device to '${LAB_ESSID}'"
+echo "   2) In another terminal:  sudo bash et_scan.sh   -> select '${LAB_ESSID}'"
+echo "   3)                        sudo bash et_sniffing_attack.sh"
 echo
-echo " Ctrl+C 로 피해 AP를 종료합니다."
+echo " Press Ctrl+C to stop the victim AP."
 echo
 
 # hostapd 가 살아있는 동안 유지(둘 중 하나가 죽으면 정리 후 종료)
