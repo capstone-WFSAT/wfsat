@@ -12,11 +12,21 @@ if [ ! -f "${_config_file}" ]; then
     echo "[!] Config file not found: ${_config_file}" >&2
     exit 1
 fi
+# 실행 시 넘긴 인터페이스 값(예: sudo interface=wlan0 bash et_scan.sh)을 보관.
+# 아래 config source가 interface를 덮어쓰므로 먼저 저장했다가 되살린다.
+_cli_interface="${interface:-}"
+
 # shellcheck source=et_config.conf
 # Windows에서 편집된 파일은 줄 끝이 \r\n(CRLF)으로 저장됨.
 # 그냥 source하면 변수 값에 \r이 포함되어 iw 등 명령이 실패함.
 # tr -d '\r'로 \r을 제거한 뒤 소싱하면 어떤 OS에서 편집해도 정상 동작.
 source <(tr -d '\r' < "${_config_file}")
+
+# 실행 시 지정한 인터페이스가 config보다 우선. 지정 시 stale phy_interface는 비운다.
+if [ -n "${_cli_interface}" ]; then
+    interface="${_cli_interface}"
+    phy_interface=""
+fi
 
 # --- Root check ---
 if [ "$(id -u)" -ne 0 ]; then
@@ -141,7 +151,10 @@ echo "[*] Enabling monitor mode on ${interface}..."
 # (전역 kill은 hostapd까지 죽여 다른 어댑터의 실습용 AP를 중단시킴)
 if [ "${preserve_external_aps:-0}" = "1" ]; then
     command -v nmcli > /dev/null 2>&1 && nmcli dev set "${interface}" managed no > /dev/null 2>&1
-    pkill -f "wpa_supplicant.*${interface}" > /dev/null 2>&1
+    # wpa_supplicant는 전역 종료한다. NM이 띄운 wpa_supplicant는 cmdline에
+    # 인터페이스명이 없어 패턴 매칭으로는 안 죽는다. wpa_supplicant는 클라이언트
+    # 데몬이라 전역 종료해도 hostapd(외부 실습 AP)에는 영향이 없다.
+    pkill -x wpa_supplicant > /dev/null 2>&1
 else
     airmon-ng check kill > /dev/null 2>&1
 fi

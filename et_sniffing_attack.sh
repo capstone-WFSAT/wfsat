@@ -12,6 +12,10 @@ if [ ! -f "${_config_file}" ]; then
 	echo "[!] Config file not found: ${_config_file}" >&2
 	exit 1
 fi
+# 실행 시 넘긴 인터페이스 값(예: sudo interface=wlan1 bash ...)을 보관한다.
+# 아래 config source가 interface 변수를 덮어쓰므로, 되살리기 위해 먼저 저장.
+_cli_interface="${interface:-}"
+
 # shellcheck source=et_config.conf
 # Windows에서 편집된 파일은 줄 끝이 \r\n(CRLF)으로 저장됨.
 # 그냥 source하면 변수 값에 \r이 포함되어 iw 등 명령이 실패함.
@@ -30,6 +34,55 @@ else
 	function log_credentials()      { :; }
 	function log_finalize()         { :; }
 fi
+
+# ============================================================
+# 실행 시 인터페이스 지정 (et_scan 과 동일한 사용감)
+#   1) env 지정:  sudo interface=wlan1 bash et_sniffing_attack.sh  (config보다 우선)
+#   2) 미지정 시  et_config.conf 의 interface 값 사용
+#   3) 그래도 비면 무선 인터페이스 목록에서 대화형 선택
+# 런타임에 인터페이스를 지정하면 config의 stale phy_interface를 무시하고
+# 해당 인터페이스에서 phy를 다시 감지하도록 phy_interface를 비운다.
+# ============================================================
+_iface_from_runtime=0
+if [ -n "${_cli_interface}" ]; then
+	interface="${_cli_interface}"
+	_iface_from_runtime=1
+fi
+
+if [ -z "${interface}" ]; then
+	echo "[*] Available WiFi interfaces:"
+	declare -a _wifaces
+	_wj=0
+	for _witer in /sys/class/net/*/; do
+		_wnm=$(basename "${_witer}")
+		if [ -d "/sys/class/net/${_wnm}/wireless" ]; then
+			_wj=$((_wj + 1))
+			_wifaces[$_wj]="${_wnm}"
+			printf "    %d) %s\n" "${_wj}" "${_wnm}"
+		fi
+	done
+	if [ "${_wj}" -eq 0 ]; then
+		echo "[!] No WiFi interfaces found." >&2
+		exit 1
+	elif [ "${_wj}" -eq 1 ]; then
+		interface="${_wifaces[1]}"
+		echo "[*] Only one interface found, using: ${interface}"
+	else
+		printf "[?] Select interface number (1-%d): " "${_wj}"
+		read -r _wsel
+		while [[ ! "${_wsel}" =~ ^[0-9]+$ ]] || [ "${_wsel}" -lt 1 ] || [ "${_wsel}" -gt "${_wj}" ]; do
+			printf "[!] Invalid. Select (1-%d): " "${_wj}"
+			read -r _wsel
+		done
+		interface="${_wifaces[${_wsel}]}"
+	fi
+	_iface_from_runtime=1
+fi
+
+if [ "${_iface_from_runtime}" -eq 1 ]; then
+	phy_interface=""
+fi
+echo "[*] Using interface: ${interface}"
 
 # --- 이 스크립트 고유의 DoS 방식 (config 값을 덮어씀) ---
 et_dos_attack="Aireplay"
@@ -955,7 +1008,9 @@ function launch_fake_ap() {
 	# (전역 kill은 hostapd까지 죽여 다른 어댑터의 실습용 AP를 중단시킴)
 	if [ "${preserve_external_aps:-0}" = "1" ]; then
 		command -v nmcli > /dev/null 2>&1 && nmcli dev set "${interface}" managed no > /dev/null 2>&1
-		pkill -f "wpa_supplicant.*${interface}" > /dev/null 2>&1
+		# wpa_supplicant는 전역 종료(NM이 띄운 것은 cmdline에 인터페이스명이 없어
+		# 패턴 매칭으로 안 죽음). 클라이언트 데몬이라 hostapd(피해 AP)엔 영향 없음.
+		pkill -x wpa_supplicant > /dev/null 2>&1
 		nm_processes_killed=1
 	elif "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
 		${airmon} check kill > /dev/null 2>&1
