@@ -20,14 +20,31 @@ CHECK_ONLY=0
 # 설치 여부만 확인한다.
 # ------------------------------------------------------------------
 DEPS=(
+	# --- 무선 스캔/공격 핵심 (aircrack-ng suite) ---
 	"airodump-ng|aircrack-ng|1.6|airodump-ng --help|[0-9]+\.[0-9]+(\.[0-9]+)?"
 	"aireplay-ng|aircrack-ng|1.6|aireplay-ng --help|[0-9]+\.[0-9]+(\.[0-9]+)?"
+	"airmon-ng|aircrack-ng|||"
+	# --- 인터페이스/무선 제어 ---
 	"iw|iw|5.4|iw --version|[0-9]+\.[0-9]+"
+	"ip|iproute2|||"
+	# --- Fake AP / DHCP ---
 	"hostapd|hostapd|2.9|hostapd -v|[0-9]+\.[0-9]+"
+	"dnsmasq|dnsmasq|2.79|dnsmasq --version|[0-9]+\.[0-9]+"
+	# --- Deauth / 스니핑 ---
+	"mdk4|mdk4|4.0|mdk4 --help|[0-9]+\.[0-9]+"
 	"ettercap|ettercap-graphical|0.8.3|ettercap -v|[0-9]+\.[0-9]+(\.[0-9]+)?(\.[0-9]+)?"
 	"etterlog|ettercap-graphical||etterlog -v|"
-	"mdk4|mdk4|4.0|mdk4 --help|[0-9]+\.[0-9]+"
-	"dnsmasq|dnsmasq|2.79|dnsmasq --version|[0-9]+\.[0-9]+"
+	# --- 공격 컴포넌트 창 실행 (기본 xterm, 대체 tmux) ---
+	"xterm|xterm|||"
+	"tmux|tmux|||"
+	# --- 라우팅/NAT ---
+	"iptables|iptables|||"
+	# --- NetworkManager 제어 / 프로세스 정리 (surgical 방식) ---
+	"nmcli|network-manager|||"
+	"pkill|procps|||"
+	# --- 대시보드 브리지 (bridge.py) ---
+	"python3|python3|||"
+	# --- 기타 ---
 	"curl|curl||curl --version|"
 )
 
@@ -73,6 +90,7 @@ fail_count=0
 
 for entry in "${DEPS[@]}"; do
 	IFS='|' read -r tool pkg min_ver ver_cmd ver_regex <<< "${entry}"
+	installed_ver=""   # 매 항목마다 초기화(미설치 항목에 이전 버전이 표시되는 버그 방지)
 
 	if ! command -v "${tool}" > /dev/null 2>&1; then
 		status="MISSING"
