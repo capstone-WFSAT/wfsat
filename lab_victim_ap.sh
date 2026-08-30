@@ -279,7 +279,8 @@ fi
 _bssid=$(cat "/sys/class/net/${LAB_IFACE}/address" 2>/dev/null)
 
 # 대상 값을 et_config.conf 에 기록 -> et_scan.sh 를 건너뛸 수 있다
-# (et_scan 은 monitor 모드 전환으로 이 피해 AP 를 끊으므로 실습에선 생략 권장)
+# (아래 preserve_external_aps=1 덕분에 et_scan 을 돌려 이 AP 를 골라도 죽지 않는다.
+#  스캔은 대상을 이미 알고 있으니 불필요할 뿐, 돌려도 문제는 없다.)
 if [ "${LAB_WRITE_CONFIG}" = "1" ] && [ -f "${_config_file}" ]; then
 	_write_config_value "bssid"   "${_bssid}"
 	_write_config_value "essid"   "${LAB_ESSID}"
@@ -303,8 +304,9 @@ echo "================================================================"
 echo
 echo " Next steps:"
 echo "   1) Connect a victim device to '${LAB_ESSID}'"
-echo "   2) In another terminal:  sudo bash et_sniffing_attack.sh"
-echo "      (et_scan.sh is NOT needed - it would break this AP via monitor mode)"
+echo "   2) In another terminal:  sudo interface=<attack-iface> bash et_sniffing_attack.sh"
+echo "      (et_scan.sh is optional - target is already saved to et_config.conf."
+echo "       Running et_scan is also safe: preserve_external_aps=1 keeps this AP alive.)"
 echo
 echo " Press Ctrl+C to stop the victim AP."
 echo
