@@ -950,7 +950,14 @@ function set_hostapd_config() {
 # NetworkManager를 중지한 뒤 hostapd로 가짜 AP를 실행하고 PID를 et_processes에 등록
 function launch_fake_ap() {
 	debug_print
-	if "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
+	# preserve_external_aps=1 이면 전역 'airmon-ng check kill'을 피하고
+	# 공격 인터페이스만 NM 관리 해제 + 해당 wpa_supplicant만 종료한다.
+	# (전역 kill은 hostapd까지 죽여 다른 어댑터의 실습용 AP를 중단시킴)
+	if [ "${preserve_external_aps:-0}" = "1" ]; then
+		command -v nmcli > /dev/null 2>&1 && nmcli dev set "${interface}" managed no > /dev/null 2>&1
+		pkill -f "wpa_supplicant.*${interface}" > /dev/null 2>&1
+		nm_processes_killed=1
+	elif "${AIRGEDDON_FORCE_NETWORK_MANAGER_KILLING:-true}"; then
 		${airmon} check kill > /dev/null 2>&1
 		nm_processes_killed=1
 	else

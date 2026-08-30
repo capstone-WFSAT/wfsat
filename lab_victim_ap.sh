@@ -32,6 +32,7 @@ LAB_NAT="${LAB_NAT:-1}"                  # 1=인터넷 공유(NAT) 켜기, 0=끄
 LAB_OPEN="${LAB_OPEN:-0}"                # 1=오픈 AP, 0=WPA2
 LAB_COUNTRY="${LAB_COUNTRY:-}"           # 국가코드(예: KR, US). 비우면 생략(2.4GHz 1~11 채널은 불필요)
                                          # 주의: '00'은 일부 hostapd 버전에서 거부됨 -> 비워두는 게 안전
+LAB_WRITE_CONFIG="${LAB_WRITE_CONFIG:-1}" # 1=et_config.conf에 대상(bssid/essid/channel) 자동 기록 -> et_scan 불필요
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _config_file="${_script_dir}/et_config.conf"
@@ -45,6 +46,16 @@ _dnsmasq_pid=""
 _nat_added=0
 _orig_ip_forward=""
 _nm_was_managed=0
+
+# et_config.conf 의 특정 key 값을 안전하게 갱신(특수문자 포함 ESSID 대응)
+# 공격용 interface 값은 건드리지 않는다(피해 AP와 별개 어댑터이므로).
+function _write_config_value() {
+	local key="$1" value="$2" tmp="${_workdir}/conf_update.tmp"
+	awk -v k="${key}" -v v="${value}" '
+		$0 ~ ("^" k "=") { print k "=\"" v "\""; next }
+		{ print }
+	' "${_config_file}" > "${tmp}" && mv "${tmp}" "${_config_file}"
+}
 
 # --- Root 확인 ------------------------------------------------------
 if [ "$(id -u)" -ne 0 ]; then
@@ -134,6 +145,12 @@ function _cleanup() {
 	# NetworkManager 관리 복원
 	if [ "${_nm_was_managed}" -eq 1 ] && command -v nmcli > /dev/null 2>&1; then
 		nmcli dev set "${LAB_IFACE}" managed yes 2>/dev/null
+	fi
+
+	# preserve_external_aps 를 원래대로(0) 되돌린다: 다음번 실제 대상 공격 때는
+	# 전역 check kill(기본 동작)로 돌아가도록.
+	if [ "${LAB_WRITE_CONFIG}" = "1" ] && [ -f "${_config_file}" ]; then
+		_write_config_value "preserve_external_aps" "0" 2>/dev/null
 	fi
 
 	echo "[+] Cleanup complete."
@@ -261,6 +278,20 @@ fi
 
 _bssid=$(cat "/sys/class/net/${LAB_IFACE}/address" 2>/dev/null)
 
+# 대상 값을 et_config.conf 에 기록 -> et_scan.sh 를 건너뛸 수 있다
+# (et_scan 은 monitor 모드 전환으로 이 피해 AP 를 끊으므로 실습에선 생략 권장)
+if [ "${LAB_WRITE_CONFIG}" = "1" ] && [ -f "${_config_file}" ]; then
+	_write_config_value "bssid"   "${_bssid}"
+	_write_config_value "essid"   "${LAB_ESSID}"
+	_write_config_value "channel" "${LAB_CHANNEL}"
+	# 전역 check kill 대신 공격 인터페이스만 NM 해제하도록 해서
+	# 스캔/공격이 이 피해 AP(hostapd)를 죽이지 않게 한다.
+	_write_config_value "preserve_external_aps" "1"
+	echo "[+] Wrote target (bssid/essid/channel) to et_config.conf"
+	echo "[+] Set preserve_external_aps=1 (scan/attack won't kill this AP)"
+	echo "    -> You can now run et_scan.sh AND et_sniffing_attack.sh without dropping this AP."
+fi
+
 echo
 echo "================================================================"
 echo " [+] Victim AP is up"
@@ -272,8 +303,8 @@ echo "================================================================"
 echo
 echo " Next steps:"
 echo "   1) Connect a victim device to '${LAB_ESSID}'"
-echo "   2) In another terminal:  sudo bash et_scan.sh   -> select '${LAB_ESSID}'"
-echo "   3)                        sudo bash et_sniffing_attack.sh"
+echo "   2) In another terminal:  sudo bash et_sniffing_attack.sh"
+echo "      (et_scan.sh is NOT needed - it would break this AP via monitor mode)"
 echo
 echo " Press Ctrl+C to stop the victim AP."
 echo

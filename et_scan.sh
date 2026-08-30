@@ -59,6 +59,11 @@ function _scan_cleanup() {
     iw "${interface}" set type managed > /dev/null 2>&1
     ip link set "${interface}" up > /dev/null 2>&1
 
+    # preserve 모드에서 NM 관리를 해제했다면 다시 복원(정상 WiFi 사용 위해)
+    if [ "${preserve_external_aps:-0}" = "1" ] && command -v nmcli > /dev/null 2>&1; then
+        nmcli dev set "${interface}" managed yes > /dev/null 2>&1
+    fi
+
     rm -rf "${tmpdir}"
 }
 
@@ -130,8 +135,16 @@ echo "[*] Physical interface : ${phy_interface}"
 # ============================================================
 echo "[*] Enabling monitor mode on ${interface}..."
 
-# Kill processes that may interfere (NetworkManager, wpa_supplicant)
-airmon-ng check kill > /dev/null 2>&1
+# Kill processes that may interfere (NetworkManager, wpa_supplicant).
+# preserve_external_aps=1 이면 전역 'airmon-ng check kill'을 피하고
+# 스캔 인터페이스만 골라서 NM 관리 해제 + 해당 wpa_supplicant만 종료한다.
+# (전역 kill은 hostapd까지 죽여 다른 어댑터의 실습용 AP를 중단시킴)
+if [ "${preserve_external_aps:-0}" = "1" ]; then
+    command -v nmcli > /dev/null 2>&1 && nmcli dev set "${interface}" managed no > /dev/null 2>&1
+    pkill -f "wpa_supplicant.*${interface}" > /dev/null 2>&1
+else
+    airmon-ng check kill > /dev/null 2>&1
+fi
 
 ip link set "${interface}" down > /dev/null 2>&1
 iw "${interface}" set type monitor > /dev/null 2>&1
