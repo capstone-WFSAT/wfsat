@@ -326,6 +326,8 @@
   };
 
   function renderTopology(scenario, phase, ctx = LEARN_TOPO) {
+    // 무대 요소가 없는 화면(예: 토폴로지를 두지 않는 라이브 뷰)에서는 조용히 건너뛴다.
+    if (!ctx || !ctx.nodeLayer) return;
     ctx.nodeLayer.innerHTML = scenario.nodes.map((node) => {
       const nodeState = phase.states[node.id] || "idle";
       return `
@@ -1191,12 +1193,13 @@
 
     function renderFlow(data) {
       const flow = buildFlow(data);
-      live.flowBadge.textContent = flow.badge;
-      live.flowFocus.textContent = flow.focus;
-      live.flowIndex.textContent = flow.index;
-      live.flowKicker.textContent = flow.kicker;
-      live.flowTitle.textContent = flow.title;
-      live.flowDesc.textContent = flow.desc;
+      // 라이브 뷰에는 flow 서술 블록이 없을 수 있으므로 요소가 있을 때만 채운다.
+      if (live.flowBadge) live.flowBadge.textContent = flow.badge;
+      if (live.flowFocus) live.flowFocus.textContent = flow.focus;
+      if (live.flowIndex) live.flowIndex.textContent = flow.index;
+      if (live.flowKicker) live.flowKicker.textContent = flow.kicker;
+      if (live.flowTitle) live.flowTitle.textContent = flow.title;
+      if (live.flowDesc) live.flowDesc.textContent = flow.desc;
       lastFlowPhase = flow.phase;
       renderTopology({ nodes: flow.nodes }, flow.phase, LIVE_TOPO);
     }
@@ -1218,14 +1221,22 @@
     }
 
     async function pollLive() {
+      // 1) 통신 단계: 여기서 실패해야만 "연결 실패" 로 표시한다.
+      let data;
       try {
         const res = await fetch(LIVE_ENDPOINT, { cache: "no-store" });
         if (!res.ok) { showLiveDisconnected(`서버 응답 오류 (${res.status})`); return; }
-        const data = await res.json();
-        setConn("ok", "연결됨");
-        renderLive(data);
+        data = await res.json();
       } catch (err) {
         showLiveDisconnected("브리지 서버에 연결할 수 없습니다");
+        return;
+      }
+      // 2) 렌더 단계: 연결은 성공했으므로 렌더 오류를 연결 실패로 표시하지 않는다.
+      setConn("ok", "연결됨");
+      try {
+        renderLive(data);
+      } catch (err) {
+        console.error("renderLive 실패:", err);
       }
     }
 
