@@ -1,3 +1,4 @@
+from .dependency import Dependency
 class HashcatCracker:
     """
     Hashcat process wrapper.
