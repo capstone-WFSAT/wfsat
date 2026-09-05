@@ -1,4 +1,14 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from .dependency import Dependency
+from ..config import Configuration
+from ..util.process import Process
+from ..util.color import Color
+from ..util.logger import log_debug, log_info, log_warning, log_error
+import os
+import re
+import threading
 class HashcatCracker:
     """
     Hashcat process wrapper.
