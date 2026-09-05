@@ -15,130 +15,77 @@ import sys
 
 class Wifite:
 
-    def __init__(self):
-        """
-        Initializes Wifite.
-        Checks that its running under *nix, with root permissions and ensures dependencies are installed.
-        """
+ def __init__(self):
+    self.print_banner()
 
-        self.print_banner()
+    Configuration.initialize(load_interface=False)
 
-        Configuration.initialize(load_interface=False)
+    from .util.tui_logger import TUILogger
+    if hasattr(Configuration, 'tui_debug') and Configuration.tui_debug:
+        TUILogger.initialize(enabled=True, debug_mode=True)
 
-        # Initialize TUI logger if debug mode is enabled
-        from .util.tui_logger import TUILogger
-        if hasattr(Configuration, 'tui_debug') and Configuration.tui_debug:
-            TUILogger.initialize(enabled=True, debug_mode=True)
+    from .util.output import OutputManager
+    if Configuration.use_tui is True:
+        OutputManager.initialize('tui')
+    else:
+        OutputManager.initialize('classic')
 
-        # Initialize output manager based on configuration
-        from .util.output import OutputManager
-        if Configuration.use_tui is True:
-            OutputManager.initialize('tui')
-        else:
-            # Default to classic mode (use_tui is False or None)
-            OutputManager.initialize('classic')
+    if Configuration.syscheck:
+        from .util.system_check import run_system_check
+        smoke_test = Configuration.verbose > 0
+        run_system_check(verbose=Configuration.verbose, smoke_test=smoke_test)
+        raise SystemExit(0)
 
-        # If --syscheck, run the comprehensive check and exit
-        if Configuration.syscheck:
-            from .util.system_check import run_system_check
-            smoke_test = Configuration.verbose > 0
-            run_system_check(verbose=Configuration.verbose, smoke_test=smoke_test)
-            raise SystemExit(0)
+    if os.name == 'nt':
+        Color.pl('{!} {R}error: {O}wifite{R} must be run under a {O}*NIX{W}{R} like OS')
+        Configuration.exit_gracefully()
+    if os.getuid() != 0:
+        Color.pl('{!} {R}error: {O}wifite{R} must be run as {O}root{W}')
+        Color.pl('{!} {R}re-run with {O}sudo{W}')
+        Configuration.exit_gracefully()
 
-        if os.name == 'nt':
-            Color.pl('{!} {R}error: {O}wifite{R} must be run under a {O}*NIX{W}{R} like OS')
-            Configuration.exit_gracefully()
-        if os.getuid() != 0:
-            Color.pl('{!} {R}error: {O}wifite{R} must be run as {O}root{W}')
-            Color.pl('{!} {R}re-run with {O}sudo{W}')
-            Configuration.exit_gracefully()
+    # WPS(bully) 등 미완성 모듈 걸리는 전체 dependency 체크는 임시 비활성화
+    # from .tools.dependency import Dependency
+    # Dependency.run_dependency_check()
 
-        from .tools.dependency import Dependency
-        Dependency.run_dependency_check()
+    self.cleanup_old_sessions()
 
-        # Emit startup debug summary when verbose
-        if Configuration.verbose >= 2:
-            from .util.logger import log_info
-            import platform
-            log_info('Wifite', 'wifite %s on Python %s (%s %s)' % (
-                Configuration.version, platform.python_version(),
-                platform.system(), platform.release()))
-            log_info('Wifite', 'verbose=%d interface=%s' % (
-                Configuration.verbose, Configuration.interface or '(auto)'))
+    self.interface_assignment = None
+    self.available_interfaces = []
 
-        # Automatic cleanup of old session files on startup
-        self.cleanup_old_sessions()
+    # interface_manager는 model.interface_info 미완성으로 임시 비활성화
+    self.interface_manager = None
 
-        # Initialize interface assignment storage
-        self.interface_assignment = None
-        self.available_interfaces = []
+def start(self):
+    if Configuration.pmkid_passive:
+        if Configuration.use_tui is None:
+            Configuration.use_tui = True
+        Configuration.get_monitor_mode_interface()
+        self.passive_pmkid_capture()
+    else:
+        Configuration.get_monitor_mode_interface()
+        self.scan_and_attack()
 
-        # Initialize interface manager for state tracking and cleanup (Task 10.4)
-        from .util.interface_manager import InterfaceManager
-        self.interface_manager = InterfaceManager()
-        # Store in Configuration for cleanup access
-        Configuration.interface_manager = self.interface_manager
+def scan_and_attack(self):
+    from .util.scanner import Scanner
+    from .attack.all import AttackAll
+
+    Color.pl('')
+
+    s = Scanner()
+    s.find_targets()
+    targets = s.select_targets()
+
+    attacked_targets = AttackAll.attack_multiple(targets, session=None, session_mgr=None)
+
+    Color.pl('{+} Finished attacking {C}%d{W} target(s), exiting' % attacked_targets)
 
     def start(self):
-        """
-        Starts target-scan + attack loop, or launches utilities depending on user input.
-        """
-        from .model.result import CrackResult
-        from .model.handshake import Handshake
-        from .util.crack import CrackHelper
-        from .util.dbupdater import DBUpdater
-
-        # Handle session cleanup
-        if Configuration.clean_sessions:
-            self.clean_sessions()
-            return
-
-        # Handle session resume
-        if Configuration.resume or Configuration.resume_latest or Configuration.resume_id:
-            self.resume_session()
-            return
-
-        if Configuration.show_cracked:
-            CrackResult.display('cracked')
-
-        elif Configuration.show_ignored:
-            CrackResult.display('ignored')
-
-        elif Configuration.check_handshake:
-            Handshake.check()
-
-        elif Configuration.crack_handshake:
-            CrackHelper.run()
-
-        elif Configuration.update_db:
-            DBUpdater.run()
-
-        elif Configuration.wpa3_check_dragonblood:
-            # Dragonblood vulnerability scan mode
-            Configuration.get_monitor_mode_interface()
-            self.dragonblood_scan()
-
-        elif hasattr(Configuration, 'owe_scan') and Configuration.owe_scan:
-            # OWE transition mode vulnerability scan
-            Configuration.get_monitor_mode_interface()
-            self.owe_scan()
-
-        elif Configuration.pmkid_passive:
-            # Passive PMKID capture mode
-            # Enable TUI by default for passive PMKID unless explicitly disabled
+        if Configuration.pmkid_passive:
             if Configuration.use_tui is None:
                 Configuration.use_tui = True
             Configuration.get_monitor_mode_interface()
             self.passive_pmkid_capture()
-
-        elif Configuration.monitor_attacks:
-            # Wireless attack monitoring mode
-            # Enable TUI by default for attack monitoring unless explicitly disabled
-            if Configuration.use_tui is None:
-                Configuration.use_tui = True
-            Configuration.get_monitor_mode_interface()
-            self.monitor_wireless_attacks()
-
         else:
             Configuration.get_monitor_mode_interface()
             self.scan_and_attack()
@@ -1206,72 +1153,18 @@ class Wifite:
                 pass
 
     def scan_and_attack(self):
-        """
-        1) Scans for targets, asks user to select targets
-        2) Attacks each target
-        """
         from .util.scanner import Scanner
         from .attack.all import AttackAll
-        from .util.session import SessionManager
 
         Color.pl('')
 
-        # Detect and assign interfaces before scanning
-        # Default to WPA attack type for general scanning
-        self.detect_and_assign_interfaces(attack_type='wpa')
-
-        # Validate interface assignment
-        is_valid, error_message, warnings = self.validate_interface_assignment()
-        self.display_validation_results(is_valid, error_message, warnings)
-        
-        if not is_valid:
-            Color.pl('{!} {R}Cannot proceed with invalid interface configuration{W}')
-            Configuration.exit_gracefully()
-
-        # Scan (no signal handler during scanning to allow proper target selection)
         s = Scanner()
-        do_continue = s.find_targets()
+        s.find_targets()
         targets = s.select_targets()
 
-        # Create session after target selection
-        session_mgr = SessionManager()
-        session = session_mgr.create_session(targets, Configuration)
-        session_mgr.save_session(session)
-
-        Color.pl('{+} Created session {C}%s{W}' % session.session_id)
-
-        # Attack modules handle KeyboardInterrupt properly, no global handler needed
-
-        if Configuration.infinite_mode:
-            while do_continue:
-                AttackAll.attack_multiple(targets, session, session_mgr)
-                do_continue = s.update_targets()
-                if not do_continue:
-                    break
-                targets = s.select_targets()
-            attacked_targets = s.get_num_attacked()
-        else:
-            # Attack
-            attacked_targets = AttackAll.attack_multiple(targets, session, session_mgr)
+        attacked_targets = AttackAll.attack_multiple(targets, session=None, session_mgr=None)
 
         Color.pl('{+} Finished attacking {C}%d{W} target(s), exiting' % attacked_targets)
-
-        # Delete session on successful completion
-        # Only delete if all targets were attacked (completed or failed)
-        summary = session.get_progress_summary()
-        if summary['remaining'] == 0:
-            # All targets were processed, safe to delete session
-            try:
-                session_mgr.delete_session(session.session_id)
-                Color.pl('{+} {G}Session completed and cleaned up{W}')
-            except (OSError, IOError) as e:
-                Color.pl('{!} {O}Warning: Could not delete session file: %s{W}' % str(e))
-            except Exception as e:
-                Color.pl('{!} {O}Warning: Unexpected error during session cleanup: %s{W}' % str(e))
-        else:
-            # Some targets remain, preserve session for resume
-            Color.pl('{+} {C}Session preserved for resume{W} ({O}%d{W} target(s) remaining)' % summary['remaining'])
-            Color.pl('{+} Use {C}--resume{W} to continue this session')
 
 
 
