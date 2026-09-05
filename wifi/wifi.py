@@ -19,8 +19,6 @@ class Wifite:
         """
         Initializes Wifite.
         """
-        self.print_banner()
-
         Configuration.initialize(load_interface=False)
 
         from .util.tui_logger import TUILogger
@@ -85,16 +83,6 @@ class Wifite:
         except Exception as e:
             if Configuration.verbose > 0:
                 Color.pl('{!} {O}Session cleanup error: %s{W}' % str(e))
-
-    @staticmethod
-    def print_banner():
-        """Displays ASCII art of the highest caliber."""
-        Color.pl(r' {G}  .     {C}{D}  ·  {W}{G}     .    {W}')
-        Color.pl(r' {G}.´  ·  .{C}{D} · · {W}{G}.  ·  `.  {G}wifite2 {D}%s{W}' % Configuration.version)
-        Color.pl(r' {G}:  :  : {C}{D}((·)){W}{G} :  :  :  {W}{D}a wireless auditor by {C}derv82{W}')
-        Color.pl(r' {G}`.  ·  `{GR}{D} /│\ {W}{G}´  ·  .´  {W}{D}maintained by {C}kimocoder{W}')
-        Color.pl(r' {G}  `     {GR}{D}/─┴─\{W}{G}     ´    {C}{D}https://github.com/kimocoder/wifite2{W}')
-        Color.pl('')
 
     def passive_pmkid_capture(self):
         """
