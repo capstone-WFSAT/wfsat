@@ -1,5 +1,4 @@
 # wfsat
-capstone project main repository
 
 sudo python3 wifi.py                    → 스캔+공격 모드 (WPA3 타겟 있으면 다운그레이드 시도)
 
