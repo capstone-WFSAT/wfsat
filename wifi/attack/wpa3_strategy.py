@@ -10,7 +10,7 @@ mode detection, PMF status, and Dragonblood vulnerability indicators.
 """
 
 from typing import Dict, Any, Optional
-from wifite.util.wpa3 import WPA3Detector
+from wifi.util.wpa3 import WPA3Detector
 
 
 class WPA3AttackStrategy:
@@ -117,7 +117,7 @@ class WPA3AttackStrategy:
         Returns:
             True if downgrade attack is possible, False otherwise
         """
-        from wifite.config import Configuration
+        from wifi.config import Configuration
         # User overrides: --no-downgrade disables the downgrade path outright,
         # and --force-sae (attack SAE directly, skip WPA2) also implies no
         # downgrade since a downgrade fundamentally captures a WPA2 handshake.
