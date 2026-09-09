@@ -1282,4 +1282,152 @@
       liveResizeTimer = window.setTimeout(() => drawTopologyConnections(lastFlowPhase, LIVE_TOPO), 140);
     });
   })();
+
+  // ── 심화 탭: 서버 명령 콘솔(화이트리스트) ───────────────────
+  (function () {
+    const EXEC_ENDPOINT = "/api/exec";
+    const COMMANDS_ENDPOINT = "/api/exec/commands";
+    const badge = $("execStatusBadge");
+    const chips = $("execChips");
+    const logEl = $("execLog");
+    const form = $("execForm");
+    const input = $("execInput");
+    const sendBtn = $("execSend");
+    if (!form || !input || !logEl) return; // 콘솔 마크업이 없으면 아무것도 안 함
+
+    let running = false;
+
+    function setBadge(startState, text) {
+      if (!badge) return;
+      badge.dataset.state = startState;
+      badge.textContent = text;
+    }
+
+    function clearEmpty() {
+      const empty = logEl.querySelector(".exec-log-empty");
+      if (empty) empty.remove();
+    }
+
+    function appendEntry(cmd) {
+      clearEmpty();
+      const entry = document.createElement("div");
+      entry.className = "exec-entry is-pending";
+      const cmdEl = document.createElement("code");
+      cmdEl.className = "exec-cmd";
+      cmdEl.textContent = cmd;
+      const meta = document.createElement("p");
+      meta.className = "exec-meta";
+      meta.textContent = "실행 중…";
+      entry.appendChild(cmdEl);
+      entry.appendChild(meta);
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      return { entry, meta };
+    }
+
+    function addOut(entry, meta, text, isErr) {
+      const pre = document.createElement("pre");
+      pre.className = isErr ? "exec-out err" : "exec-out";
+      pre.textContent = text;
+      entry.insertBefore(pre, meta);
+    }
+
+    function fillEntry(ref, result) {
+      const entry = ref.entry;
+      const meta = ref.meta;
+      entry.classList.remove("is-pending");
+      const ok = !!result.ok;
+      entry.classList.add(ok ? "is-ok" : "is-fail");
+      const out = (result.stdout || "").replace(/\s+$/, "");
+      const err = (result.stderr || result.error || "").replace(/\s+$/, "");
+      if (out) addOut(entry, meta, out, false);
+      if (err) addOut(entry, meta, err, true);
+      if (!out && !err) addOut(entry, meta, ok ? "(출력 없음)" : "(실패)", !ok);
+      let label;
+      if (result.background) label = "백그라운드 실행 (PID " + result.pid + ")";
+      else if (result.timeout) label = "시간 초과";
+      else if (result.returncode !== null && result.returncode !== undefined) label = "종료 코드 " + result.returncode;
+      else label = ok ? "완료" : "실패";
+      meta.textContent = label;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function runCommand(cmd) {
+      if (running) return;
+      running = true;
+      input.disabled = true;
+      sendBtn.disabled = true;
+      const ref = appendEntry(cmd);
+      try {
+        const res = await fetch(EXEC_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: cmd }),
+        });
+        let data;
+        try {
+          data = await res.json();
+        } catch (e) {
+          data = { ok: false, error: "서버 응답을 해석할 수 없습니다 (" + res.status + ")" };
+        }
+        fillEntry(ref, data);
+      } catch (err) {
+        fillEntry(ref, { ok: false, error: "브리지 서버에 연결할 수 없습니다." });
+      } finally {
+        running = false;
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const cmd = input.value.trim();
+      if (!cmd || running) return;
+      input.value = "";
+      runCommand(cmd);
+    });
+
+    async function loadCommands() {
+      let info;
+      try {
+        const res = await fetch(COMMANDS_ENDPOINT, { cache: "no-store" });
+        info = await res.json();
+      } catch (err) {
+        setBadge("error", "서버 없음");
+        return;
+      }
+      if (!info || info.enabled === false) {
+        setBadge("disabled", "비활성화됨");
+        input.placeholder = "명령 실행이 비활성화되어 있습니다";
+        return;
+      }
+      setBadge("ok", "연결됨");
+      input.disabled = false;
+      sendBtn.disabled = false;
+      chips.innerHTML = "";
+      (info.commands || []).forEach((c) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "exec-chip";
+        chip.textContent = c.label;
+        chip.title = (c.prefix || "") + (c.desc ? " — " + c.desc : "");
+        if (c.background) chip.dataset.bg = "1";
+        chip.addEventListener("click", () => {
+          if (c.allow_args) {
+            // 인자가 필요한 명령은 입력창에 채워두고 사용자가 마무리
+            input.value = c.prefix + " ";
+            input.focus();
+          } else {
+            // 인자 없는 조회성 명령은 바로 실행
+            runCommand(c.prefix);
+          }
+        });
+        chips.appendChild(chip);
+      });
+    }
+
+    loadCommands();
+  })();
 })();

@@ -193,6 +193,7 @@
           <span><small>선택 학습 · DEEP DIVE</small><strong>수치와 패킷으로 더 확인하기</strong></span>
         </div>
         <div class="advanced-lab-content">
+          <div class="advanced-lab-main">
           <section class="metrics-grid" aria-label="현재 시뮬레이션 수치 요약">
             <article class="metric-card">
               <div class="metric-icon cyan" aria-hidden="true">⌁</div>
@@ -244,6 +245,24 @@
             </div>
             <div id="identityList" class="identity-list"></div>
           </article>
+          </div><!-- /.advanced-lab-main -->
+
+          <aside class="panel exec-console-panel" aria-labelledby="execHeading">
+            <div class="panel-heading compact">
+              <div><p class="section-kicker">D · SERVER CONSOLE</p><h3 id="execHeading">명령 콘솔</h3></div>
+              <span id="execStatusBadge" class="live-count" data-state="connecting">확인 중…</span>
+            </div>
+            <p class="exec-note">브리지 서버(칼리)에서 <strong>허용된 명령만</strong> 실행합니다. 아래 버튼으로 넣거나 직접 입력하세요.</p>
+            <div id="execChips" class="exec-chips" aria-label="빠른 명령"></div>
+            <div id="execLog" class="exec-log" role="log" aria-live="polite" aria-label="명령 실행 결과">
+              <p class="exec-log-empty">아직 실행한 명령이 없습니다.</p>
+            </div>
+            <form id="execForm" class="exec-form" autocomplete="off">
+              <input id="execInput" class="exec-input" type="text" spellcheck="false"
+                     placeholder="예: bash et_scan.sh" aria-label="실행할 명령" disabled>
+              <button id="execSend" class="exec-send" type="submit" disabled>실행</button>
+            </form>
+          </aside>
         </div>
       </section>
 

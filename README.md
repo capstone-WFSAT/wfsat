@@ -118,6 +118,18 @@ python3 bridge.py     # 0.0.0.0:5000, dashboard_html/ 도 함께 서빙 (추가 
 - 공격이 `et_config.conf`의 `log_dir`(기본 `/tmp/et_logs`)에 남긴 로그를 직접 읽는다 → **브리지는 공격과 같은 Kali에서 실행**해야 한다.
 - `GET /api/state` — 요약+이벤트+탐지 결과 통합 JSON (데이터 없어도 "대기 중" 반환)
 
+### 심화 탭 명령 콘솔 (`/api/exec`)
+학습 모드 하단 **심화(DEEP DIVE)** 섹션 오른쪽에 채팅형 명령 콘솔이 있다. 여기서 명령을 입력하면 **브리지가 도는 Kali에서 실행**되고 결과가 콘솔에 표시된다.
+
+- **화이트리스트 방식** — `bridge.py`의 `ALLOWED_COMMANDS`에 등록된 명령만 실행된다 (스캔/탐지/의존성 점검/피해 AP/스니핑 공격/인터페이스 조회/설정 확인). 임의 셸 명령은 거부되고, 셸 메타문자(`; | & \` $ > <` 등)도 차단된다.
+- 빠른 명령 버튼(칩)으로 채워 넣거나 직접 입력한다. 인자가 필요한 명령은 칩이 앞부분만 채워준다.
+- 오래 도는 공격/AP 스크립트(`et_sniffing_attack.sh`, `lab_victim_ap.sh`)는 **백그라운드로 실행**되고 즉시 PID를 돌려준다. 출력은 `<log_dir>/exec_<시각>.log`에 쌓인다.
+- 조회성 명령의 최대 대기 시간은 `WFSAT_EXEC_TIMEOUT`(기본 60초).
+
+> ⚠️ **보안** — 브리지는 기본적으로 `0.0.0.0`에 바인딩된다. 즉 같은 네트워크의 누구나 인증 없이 이 화이트리스트 명령을 실행할 수 있다. **격리된 실습 랜에서만** 사용하고, 필요하면 다음으로 잠근다:
+> - `WFSAT_HOST=127.0.0.1 python3 bridge.py` — 로컬에서만 접속
+> - `WFSAT_ENABLE_EXEC=0 python3 bridge.py` — 콘솔 기능 완전 비활성화 (`/api/exec`는 403, UI는 "비활성화됨" 표시)
+
 ### 접속 주소 확인
 브리지는 `0.0.0.0:5000`에 바인딩되므로 외부에서는 `http://<Kali IP>:5000/`로 접속한다. IP는:
 ```bash
@@ -141,7 +153,7 @@ ip -brief -4 addr
 | `et_sniffing_attack.sh` | 이블트윈/스니핑 공격 본체 |
 | `et_logger.sh` | 공격 이벤트 로깅 (JSONL/요약 JSON) |
 | `et_config.conf` | 공용 설정 파일 |
-| `bridge.py` | 대시보드 브리지 서버 |
+| `bridge.py` | 대시보드 브리지 서버 (`/api/state`·`/api/exec` 포함) |
 | `dashboard_html/` | 학습/실습 대시보드 (정적) |
 | `detector/` | 탐지 로직 |
 
