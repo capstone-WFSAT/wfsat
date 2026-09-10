@@ -8,6 +8,20 @@ WiFi 이블트윈/스니핑 공격 실습 도구 모음. 스캔 → 가짜 AP �
 
 ---
 
+## 목차
+
+- [0. 준비물](#0-준비물)
+- [사용 방법 A — 격리된 실습 (권장, 자체 피해 AP)](#사용-방법-a--격리된-실습-권장-자체-피해-ap)
+- [사용 방법 B — 실제 대상 (외부 공유기)](#사용-방법-b--실제-대상-외부-공유기)
+- [탐지 분석 — detector/et_detector.py](#탐지-분석--detectoret_detectorpy)
+- [인터페이스 이름 문제 (wlan0/wlan1 뒤바뀜)](#인터페이스-이름-문제-wlan0wlan1-뒤바뀜)
+- [창 모드 (xterm / tmux)](#창-모드-xterm--tmux)
+- [대시보드 (실시간) — bridge.py + dashboard_html/](#대시보드-실시간--bridgepy--dashboard_html)
+- [파일 구성](#파일-구성)
+- [트러블슈팅](#트러블슈팅)
+
+---
+
 ## 0. 준비물
 
 - Kali Linux (또는 유사 배포판)
@@ -77,6 +91,40 @@ sudo bash et_sniffing_attack.sh
 
 ---
 
+## 탐지 분석 — detector/et_detector.py
+
+공격의 반대편, **방어/탐지** 도구다. 저장된 pcap을 오프라인으로 분석해 기본 evil twin 공격(오픈 가짜 AP 복제)을 탐지하고, 결과를 대시보드 **실습 모드의 "Evil Twin 탐지" 카드**에 채워 넣는 JSON을 만든다. 설계 근거·신호 정의는 [`detector/README.md`](detector/README.md) / [`docs/evil-twin-defense.md`](docs/evil-twin-defense.md) 참고.
+
+### 설치
+```bash
+pip install -r detector/requirements.txt
+```
+
+### 1) 분석용 pcap 캡처
+관리 프레임(beacon/probe response)이 담긴 pcap이 필요하다. 모니터 모드에서:
+```bash
+sudo airodump-ng -c <채널> --bssid <타깃> -w capture wlan0mon   # → capture-01.cap
+# 또는
+sudo tcpdump -i wlan0mon -w capture.pcap
+```
+
+### 2) 분석 실행 (+ 대시보드 연동)
+```bash
+# 리포트만 (stdout)
+python3 detector/et_detector.py capture-01.cap
+
+# 리포트 + JSON 저장 → 대시보드 "Evil Twin 탐지" 카드에 반영
+python3 detector/et_detector.py capture-01.cap --json /tmp/et_logs/detect.json
+```
+- `--json <경로>` — `ap_table` + `findings`를 JSON으로 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 **같은 경로**로 저장하면 대시보드가 자동으로 읽는다.
+- `--quiet` — stdout 리포트 없이 JSON만 저장.
+
+**P0 탐지 신호:** S1 ESSID 안 zero-width 문자(가중치 0.45) · S2 1-nibble만 다른 쌍둥이 BSSID(0.20) · S3 암호화 다운그레이드 WPA→OPEN(0.15). `score ≥ 0.6` 또는 S1 참이면 **공격중**, `≥ 0.3`이면 **의심**, 그 외 **정상**.
+
+> 브리지 명령 콘솔(`/api/exec`)의 "Evil Twin 탐지" 명령으로도 실행할 수 있다(화이트리스트 등록됨).
+
+---
+
 ## 인터페이스 이름 문제 (wlan0/wlan1 뒤바뀜)
 
 `wlanX` 번호는 연결/부팅 순서에 따라 **바뀔 수 있다.** 그래서 실행할 때마다 인터페이스를 직접 지정하는 방식을 쓴다:
@@ -117,6 +165,8 @@ python3 bridge.py     # 0.0.0.0:5000, dashboard_html/ 도 함께 서빙 (추가 
 ```
 - 공격이 `et_config.conf`의 `log_dir`(기본 `/tmp/et_logs`)에 남긴 로그를 직접 읽는다 → **브리지는 공격과 같은 Kali에서 실행**해야 한다.
 - `GET /api/state` — 요약+이벤트+탐지 결과 통합 JSON (데이터 없어도 "대기 중" 반환)
+  - **상태·이벤트 카드**는 공격 스크립트가 남기는 로그(`et_summary.json` / `*.jsonl`)에서 자동으로 채워진다.
+  - **"Evil Twin 탐지" 카드**는 [`et_detector.py`가 만든 `detect.json`](#탐지-분석--detectoret_detectorpy)이 있어야 채워진다.
 
 ### 심화 탭 명령 콘솔 (`/api/exec`)
 학습 모드 하단 **심화(DEEP DIVE)** 섹션 오른쪽에 채팅형 명령 콘솔이 있다. 여기서 명령을 입력하면 **브리지가 도는 Kali에서 실행**되고 결과가 콘솔에 표시된다.
@@ -141,6 +191,44 @@ ip -brief -4 addr
 
 > 공격 실행 시 `airmon-ng`/라우팅 변경으로 WiFi 관리 경로가 끊길 수 있다. 대시보드는 **공격에 안 쓰는 유선(eth0)** 으로 접속하는 것이 안정적이다.
 
+### 원격/외부 접속 — 다른 LAN(또는 인터넷)에서 접속
+서버(Kali)를 집에 두고 **다른 네트워크의 노트북**에서 대시보드를 볼 때. VM은 대개 NAT(예: VMware `192.168.x.x`) 뒤에 있어 라우터 포트포워딩은 까다롭다 → **밖으로 나가는 터널**이 NAT를 그냥 통과하므로 가장 쉽다. (모든 명령은 서버 Kali에서 실행한다.)
+
+| 방법 | 공개 URL | 인증 | 비고 |
+|---|---|---|---|
+| **Tailscale** (권장) | 없음(사설) | 계정 로그인 | 내 기기끼리만 통하는 VPN. 원격이지만 localhost처럼 사용 |
+| ngrok | 있음 | `--basic-auth` 가능 | 가입 후 authtoken 1회 등록 필요 |
+| cloudflared 즉석 터널 | 있음 | **없음** | `trycloudflare` URL은 인증 불가 → 공개 노출 주의 |
+| SSH 포트포워딩 | 없음 | SSH 키 | 서버에 SSH로 닿을 수 있을 때(예: Tailscale SSH 경유) |
+
+**Tailscale (권장 — 공개 URL 없음, 내 기기끼리만):**
+```bash
+# 서버(Kali)와 노트북 양쪽에서
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4            # 서버의 100.x.x.x 확인
+# 노트북 브라우저: http://<서버 tailscale IP>:5000/   (브리지는 WFSAT_HOST=0.0.0.0)
+```
+
+**cloudflared 즉석 터널 (계정 불필요, 즉석 시연용):**
+```bash
+# apt 저장소에 없으므로 공식 바이너리 직접 설치 (arm64면 amd64→arm64)
+curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
+cloudflared tunnel --url http://localhost:5000     # 출력되는 https://xxxx.trycloudflare.com 접속
+```
+
+**ngrok (인증 가능):**
+```bash
+ngrok config add-authtoken <ngrok 사이트 토큰>
+ngrok http 5000 --basic-auth "demo:비밀번호"
+```
+
+> 🔐 **원격 노출 시 보안 (반드시 읽을 것)** — 명령 콘솔(`/api/exec`)은 인증이 없다. 공개 URL(cloudflared/ngrok 무인증)로 열면 **URL을 아는 누구나 서버에서 공격 명령을 실행**할 수 있다. 원격 시연에서는:
+> - **화면만 보여줄 때** → 콘솔을 끄고 터널로만 연다: `WFSAT_HOST=127.0.0.1 WFSAT_ENABLE_EXEC=0 python3 bridge.py` (127.0.0.1이면 LAN 노출도 없이 터널로만 접근)
+> - **원격에서 명령까지 조작할 때** → **Tailscale**(사설) 또는 **인증 붙은 터널**(ngrok `--basic-auth`, Cloudflare Access)을 쓴다. 무인증 공개 URL로 콘솔을 켜두지 말 것.
+> - 현재 콘솔 활성 여부 확인: `curl -s http://localhost:5000/api/exec/commands | head -c 60` → `"enabled": true/false`
+
 ---
 
 ## 파일 구성
@@ -155,7 +243,8 @@ ip -brief -4 addr
 | `et_config.conf` | 공용 설정 파일 |
 | `bridge.py` | 대시보드 브리지 서버 (`/api/state`·`/api/exec` 포함) |
 | `dashboard_html/` | 학습/실습 대시보드 (정적) |
-| `detector/` | 탐지 로직 |
+| `detector/` | Evil Twin 오프라인 pcap 탐지 분석기 `et_detector.py` (+ 샘플 pcap 생성기, `requirements.txt`) |
+| `docs/` | 설계 문서 (`evil-twin-defense.md`, `files.md`, `main.md`) |
 
 ### 주요 설정값 (`et_config.conf`)
 - `interface` — 공격 어댑터 (실행 시 `interface=`로 덮어쓸 수 있음)
@@ -178,8 +267,22 @@ ip -brief -4 addr
 **et_scan / 공격이 실습용 피해 AP를 죽인다**
 - `preserve_external_aps=1`이 설정돼 있어야 한다 (lab 스크립트가 자동 설정). `grep preserve_external_aps et_config.conf`로 확인.
 
+**피해 단말이 AP엔 붙는데 인터넷이 안 된다 / "인터넷 연결되지 않음"**
+- 먼저 인터넷 공유(NAT)가 켜졌는지: lab 스크립트 로그에 `Internet: <iface> -> <uplink> (NAT)`가 떠야 한다. `none`이면 업링크 자동 감지 실패 → `LAB_UPLINK=<인터넷 나가는 인터페이스>`로 지정.
+- **제한적 업링크(학교/회사망)에서 자주 발생.** lab 스크립트는 클라이언트에 공개 DNS(`8.8.8.8`/`1.1.1.1`)를 나눠주는데([lab_victim_ap.sh](lab_victim_ap.sh)의 `dhcp-option=6`), 이런 망은 외부 DNS(`:53`)와 DoT(`:853`)를 차단한다 → **IP 통신은 되는데 도메인이 안 풀려** "인터넷 없음"으로 보인다. (홈 공유기처럼 안 막는 망에선 기본값 그대로 잘 됨.)
+  - 확인: 피해 단말에서 도메인 대신 **실제 웹서버 IP로 직접 접속**해 열리면 DNS 문제로 확정. (진단은 `sudo tcpdump -ni <uplink> port 53 or port 853` — 질의는 나가는데 응답이 없거나 RST면 차단.)
+  - 삼성 등은 **비공개 DNS(Private DNS, DoT)** 가 기본 켜져 있어 막히므로 단말에서 끈다: 설정 → 연결 → 기타 연결 설정 → 비공개 DNS → **끔**.
+  - 근본 해결: 업링크가 실제 쓰는 DNS를 클라이언트에 주거나, dnsmasq를 포워딩 리졸버로 돌려 `dhcp-option=6,192.168.50.1`(Kali 자신)로 넘긴다 → 클라이언트 질의가 Kali를 거쳐 업링크 DNS로 나간다.
+- 참고: 게이트웨이(`192.168.50.1`)가 단말에 `ICMP time exceeded`를 계속 보내면 포워딩 루프다. 클라이언트 트래픽이 업링크로 정상 NAT되는지(`sudo iptables -t nat -L POSTROUTING -v -n`의 MASQUERADE 카운터 증가) 먼저 확인.
+
 **대시보드가 계속 비어 있다**
 - 브리지가 공격과 같은 호스트인지, 주소를 `eth0` IP로 접속했는지, **실습 모드로 토글**했는지 확인.
+
+**외부(다른 기기/LAN)에서 접속이 안 된다**
+- `sudo ss -tlnp | grep :5000`이 `0.0.0.0:5000`인지 확인(`127.0.0.1`이면 로컬 전용).
+- 접속 주소가 가짜/피해 AP 서브넷(`192.168.50.x`, `192.169.x.x`)이 아니라 실제 접근 가능한 IP인지 확인. VM이 NAT(`192.168.x.x`) 뒤면 다른 LAN에선 직접 접속 불가 → 위 **"원격/외부 접속"** 의 터널(Tailscale 등)을 쓴다.
+- 서버 자신에서 `curl -s http://localhost:5000/api/state | head -c 80`이 응답하면 서버는 정상 → 네트워크/방화벽 문제.
+- 방화벽: `sudo ufw status` / `sudo iptables -L INPUT -n`. 막혀 있으면 `sudo ufw allow 5000/tcp` 또는 `sudo iptables -I INPUT -p tcp --dport 5000 -j ACCEPT`.
 
 **인터페이스 이름이 매번 바뀐다**
 - 실행 시 `interface=` / `LAB_IFACE=`로 직접 지정한다 (위 "인터페이스 이름 문제" 참고).
