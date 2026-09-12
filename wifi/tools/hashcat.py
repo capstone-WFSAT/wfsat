@@ -47,7 +47,7 @@ class HashcatCracker:
             '--status',
             '--status-timer', str(self.STATUS_TIMER_SECONDS),
             '--machine-readable',
-            '-w', '3',
+            '-w', '1',
             self.hash_file,
             self.wordlist,
         ]
