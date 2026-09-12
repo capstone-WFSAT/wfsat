@@ -277,7 +277,7 @@ class Hashcat(Dependency):
             return None 
         for line in stdout.strip().split('\n'): 
             line = line.strip() 
-            if 'WPA*' in line and ':' in line: 
+            if line and ':' in line:
                 return line.rsplit(':', 1)[-1].strip() 
         return None 
  
