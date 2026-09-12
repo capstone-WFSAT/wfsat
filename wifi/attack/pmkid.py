@@ -537,6 +537,8 @@ class AttackPMKID(Attack):
                             time.sleep(2)
 
                         key = cracker.get_result()
+                        if key is None:
+                            key = Hashcat._check_potfile(pmkid_file, mode='22000')
                 except KeyboardInterrupt:
                     return self._handle_hashcat_failure(
                         '\n{!} {R}Failed to crack PMKID: {O}Cracking interrupted by user{W}'
