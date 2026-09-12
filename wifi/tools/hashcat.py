@@ -697,4 +697,4 @@ class HcxPcapngTool(Dependency):
                     if Configuration.verbose > 0: 
                         Color.pl('{!} {O}Warning: Could not remove PMKID hash file: %s{W}' % str(e)) 
  
-        return pmkids 그냥 전체코드 너가 알아서 바꿔줘
+        return pmkids
