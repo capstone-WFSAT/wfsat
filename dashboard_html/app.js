@@ -1410,7 +1410,8 @@
       if (err) addOut(entry, meta, err, true);
       if (!out && !err) addOut(entry, meta, ok ? "(출력 없음)" : "(실패)", !ok);
       let label;
-      if (result.background) label = "백그라운드 실행 (PID " + result.pid + ")";
+      if (result.terminal) label = "새 터미널 창에서 실행 (PID " + result.pid + ")";
+      else if (result.background) label = "백그라운드 실행 (PID " + result.pid + ")";
       else if (result.timeout) label = "시간 초과";
       else if (result.returncode !== null && result.returncode !== undefined) label = "종료 코드 " + result.returncode;
       else label = ok ? "완료" : "실패";
@@ -1487,7 +1488,7 @@
       if (c && c.prefix && c.prefix !== alias) {
         const real = document.createElement("small");
         real.className = "exec-help-real";
-        real.textContent = "실행 → " + c.prefix;
+        real.textContent = "실행 → " + c.prefix + (c.terminal ? "  · 새 터미널 창" : "");
         b.appendChild(real);
       }
       b.addEventListener("click", () => runOrFill(token));

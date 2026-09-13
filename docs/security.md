@@ -128,3 +128,9 @@ kali ALL=(root) NOPASSWD: /usr/bin/bash, /usr/bin/python3, /usr/sbin/iw, /usr/sb
 | `WFSAT_ENABLE_EXEC` | `1` | `0`이면 명령 콘솔 비활성화 |
 | `WFSAT_SUDO` | `sudo -n` | root 명령 앞에 붙일 sudo. `""`이면 자동 sudo 끔 |
 | `WFSAT_EXEC_TIMEOUT` | `60` | 포그라운드 명령 타임아웃(초) |
+| `WFSAT_TERMINAL_ENABLE` | `1` | `0`이면 새 터미널 창 실행 끄고 백그라운드 로그로 처리 |
+| `WFSAT_TERMINAL` | (자동탐지) | 사용할 터미널 강제 지정 (예: `xterm`, `qterminal`) |
+| `WFSAT_DISPLAY` | (환경값) | root로 실행 시 GUI 표시용 DISPLAY (보통 `:0`) |
+| `WFSAT_XAUTHORITY` | (자동탐지) | root로 실행 시 로그인 사용자의 `~/.Xauthority` 경로 |
+
+> **터미널 실행 참고**: `scan`·`attack`·`ap`·`deps`는 새 터미널 창에서 실행되어 실시간 로그를 보고 대화형 입력(스캔 대상 선택 등)도 그 창에서 할 수 있다. 출력은 `/tmp/et_logs/term_*.log`에도 저장된다. root(`sudo`)로 브리지를 띄우면 GUI 연결을 위해 `WFSAT_DISPLAY`/`WFSAT_XAUTHORITY`가 필요할 수 있으므로, 터미널 실행은 **데스크톱 사용자로 브리지를 실행**(스크립트만 NOPASSWD sudo)하는 편이 가장 매끄럽다.

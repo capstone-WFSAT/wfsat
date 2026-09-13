@@ -37,6 +37,7 @@ import json
 import mimetypes
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -68,6 +69,18 @@ MAX_OUTPUT = 20000  # 응답에 담을 stdout/stderr 최대 길이(문자)
 #   - WFSAT_SUDO="" 로 두면 자동 sudo 를 완전히 끈다.
 SUDO_CMD = os.environ.get("WFSAT_SUDO", "sudo -n")
 
+# 새 터미널 창에서 실행하기(공격/스캔처럼 대화형·장시간 명령용).
+#   WFSAT_TERMINAL_ENABLE=0 이면 끈다.
+#   WFSAT_TERMINAL 로 터미널 명령을 강제 지정 가능(예: "xterm", "qterminal").
+#   root 로 실행 중이면 GUI 를 띄우기 위해 WFSAT_DISPLAY / WFSAT_XAUTHORITY 가
+#   필요할 수 있다(보통 DISPLAY=:0, XAUTHORITY=로그인 사용자의 ~/.Xauthority).
+TERMINAL_ENABLED = os.environ.get("WFSAT_TERMINAL_ENABLE", "1").strip().lower() not in (
+    "0", "false", "no", "off", "",
+)
+TERMINAL_CMD = os.environ.get("WFSAT_TERMINAL", "").strip()
+_TERMINALS = ["x-terminal-emulator", "qterminal", "xfce4-terminal",
+              "gnome-terminal", "konsole", "mate-terminal", "lxterminal", "xterm"]
+
 
 def _is_root():
     geteuid = getattr(os, "geteuid", None)
@@ -89,13 +102,13 @@ def _is_root():
 #                입력해도 동작한다(하위 호환).
 ALLOWED_COMMANDS = [
     {"label": "의존성 점검", "alias": "deps", "prefix": "bash et_check_deps.sh", "group": "준비",
-     "allow_args": True, "root": True, "desc": "필요 도구 점검/설치 (--check-only 로 점검만)"},
+     "allow_args": True, "root": True, "terminal": True, "desc": "필요 도구 점검/설치 (--check-only 로 점검만)"},
     {"label": "AP 스캔", "alias": "scan", "prefix": "bash et_scan.sh", "group": "준비",
-     "allow_args": True, "root": True, "desc": "주변 AP 스캔 → et_config.conf 저장"},
+     "allow_args": True, "root": True, "terminal": True, "desc": "주변 AP 스캔 → et_config.conf 저장 (대상 선택 필요)"},
     {"label": "피해 AP 실행", "alias": "ap", "prefix": "bash lab_victim_ap.sh", "group": "공격",
-     "allow_args": True, "background": True, "root": True, "desc": "실습용 피해 AP 생성 (백그라운드)"},
+     "allow_args": True, "root": True, "terminal": True, "background": True, "desc": "실습용 피해 AP 생성 (새 터미널)"},
     {"label": "스니핑 공격 실행", "alias": "attack", "prefix": "bash et_sniffing_attack.sh", "group": "공격",
-     "allow_args": True, "background": True, "root": True, "desc": "가짜 AP+deauth+스니퍼 (백그라운드)"},
+     "allow_args": True, "root": True, "terminal": True, "background": True, "desc": "가짜 AP+deauth+스니퍼 (새 터미널)"},
     {"label": "Evil Twin 탐지", "alias": "detect", "prefix": "python3 detector/et_detector.py", "group": "탐지",
      "allow_args": True, "root": True, "desc": "pcap 분석으로 Evil Twin 탐지 (인자로 pcap 경로)"},
     {"label": "무선 인터페이스", "alias": "iface", "prefix": "iw dev", "group": "조회",
@@ -215,6 +228,86 @@ def _run_background(argv, cmd):
             "stderr": ""}
 
 
+def _find_terminal():
+    """사용 가능한 터미널 에뮬레이터 실행 파일 이름을 찾는다. 없으면 None."""
+    if TERMINAL_CMD:
+        exe = shlex.split(TERMINAL_CMD)[0] if TERMINAL_CMD else ""
+        return TERMINAL_CMD if (exe and shutil.which(exe)) else None
+    for t in _TERMINALS:
+        if shutil.which(t):
+            return t
+    return None
+
+
+def _terminal_argv(term, inner):
+    """터미널별로 'bash -lc <inner>' 를 실행하는 argv 를 만든다."""
+    if TERMINAL_CMD and len(shlex.split(TERMINAL_CMD)) > 1:
+        return shlex.split(TERMINAL_CMD) + ["bash", "-lc", inner]
+    name = os.path.basename(shlex.split(term)[0])
+    if name == "gnome-terminal":
+        return ["gnome-terminal", "--", "bash", "-lc", inner]
+    if name == "xfce4-terminal":
+        return ["xfce4-terminal", "--hold", "-e", "bash -lc " + shlex.quote(inner)]
+    return [term, "-e", "bash", "-lc", inner]
+
+
+def _gui_env():
+    """GUI 창을 띄우기 위한 DISPLAY / XAUTHORITY 를 채운 환경을 반환한다."""
+    env = dict(os.environ)
+    disp = env.get("DISPLAY") or os.environ.get("WFSAT_DISPLAY") or ":0"
+    env["DISPLAY"] = disp
+    xauth = env.get("XAUTHORITY") or os.environ.get("WFSAT_XAUTHORITY")
+    if not xauth and _is_root():
+        # sudo 로 root 실행 시, 로그인 사용자의 Xauthority 를 찾아본다.
+        cands = []
+        user = os.environ.get("SUDO_USER")
+        if user:
+            cands.append("/home/%s/.Xauthority" % user)
+        cands.append("/root/.Xauthority")
+        for c in cands:
+            if os.path.exists(c):
+                xauth = c
+                break
+    if xauth:
+        env["XAUTHORITY"] = xauth
+    return env, disp
+
+
+def _run_in_terminal(cmd):
+    """새 터미널 창을 열어 cmd 를 실행한다. 출력은 창에 보이면서 로그 파일에도 tee 된다.
+    터미널을 찾지 못하거나 실패하면 None 을 돌려 호출부가 대체 실행하도록 한다."""
+    term = _find_terminal()
+    if not term:
+        return None
+    env, disp = _gui_env()
+    if not disp:
+        return None
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+    except OSError:
+        pass
+    logpath = os.path.join(LOG_DIR, "term_%d.log" % int(time.time()))
+    inner = (
+        "cd %s; %s 2>&1 | tee %s; rc=${PIPESTATUS[0]}; echo; "
+        "echo \"[끝났습니다 · 종료 코드 $rc · 이 창은 닫아도 됩니다]\"; exec bash"
+    ) % (shlex.quote(SCRIPT_DIR), cmd, shlex.quote(logpath))
+    term_argv = _terminal_argv(term, inner)
+    try:
+        proc = subprocess.Popen(
+            term_argv, cwd=SCRIPT_DIR, env=env,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+    except (FileNotFoundError, OSError):
+        return None
+    return {"ok": True, "command": cmd, "terminal": True, "pid": proc.pid,
+            "returncode": None, "log": logpath,
+            "stdout": "새 터미널 창에서 실행했습니다. (%s · PID %d)\n로그: %s\n"
+                      "창에서 실시간으로 진행 상황을 보고, 대화형 입력(예: 스캔 대상 선택)도 "
+                      "그 창에서 하면 됩니다." % (os.path.basename(term), proc.pid, logpath),
+            "stderr": ""}
+
+
 def run_command(cmd):
     """화이트리스트 검증 후 명령을 실행하고 결과 dict 를 반환한다."""
     cmd = (cmd or "").strip()
@@ -245,6 +338,16 @@ def run_command(cmd):
     else:
         argv = tokens
     eff_cmd = " ".join(shlex.quote(a) for a in argv)
+    # 터미널 실행 대상이면 새 창에서 실행(대화형/장시간 명령).
+    if TERMINAL_ENABLED and entry.get("terminal"):
+        res = _run_in_terminal(eff_cmd)
+        if res is not None:
+            return res
+        # 새 터미널을 못 열면 백그라운드 로그 실행으로 대체한다.
+        res = _run_background(argv, eff_cmd)
+        res["stdout"] = ("새 터미널을 열 수 없어(터미널/디스플레이 미검출) 백그라운드로 "
+                         "실행했습니다.\n" + res.get("stdout", ""))
+        return res
     if entry.get("background"):
         return _run_background(argv, eff_cmd)
     return _run_foreground(argv, eff_cmd)
@@ -261,7 +364,8 @@ def exec_commands_info():
              "desc": e.get("desc", ""),
              "group": e.get("group", "기타"),
              "allow_args": bool(e.get("allow_args")),
-             "background": bool(e.get("background"))}
+             "background": bool(e.get("background")),
+             "terminal": bool(e.get("terminal"))}
             for e in ALLOWED_COMMANDS
         ],
     }
@@ -485,6 +589,16 @@ def main():
         else:
             print(" Privilege  : not root and WFSAT_SUDO disabled - root "
                   "commands will fail")
+        if TERMINAL_ENABLED:
+            term = _find_terminal()
+            if term:
+                print(" Terminal   : new window via '%s' (attack/scan run there)"
+                      % os.path.basename(shlex.split(term)[0]))
+            else:
+                print(" Terminal   : no terminal emulator found - will fall back "
+                      "to background logs")
+        else:
+            print(" Terminal   : disabled (WFSAT_TERMINAL_ENABLE=0)")
     else:
         print(" Exec API   : disabled (set WFSAT_ENABLE_EXEC=1 to enable)")
     print(" Log dir    : %s" % LOG_DIR)
