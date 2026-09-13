@@ -2199,6 +2199,7 @@ footer button {
 /* ── 심화 탭 명령 콘솔 ─────────────────────────────────────── */
 .exec-console-panel {
   margin-top: 12px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   min-width: 0;
