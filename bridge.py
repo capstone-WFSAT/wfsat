@@ -118,7 +118,7 @@ ALLOWED_COMMANDS = [
      "allow_args": True, "root": True, "background": True, "desc": "관리 프레임 몇 초 캡처 → pcap 저장 (CAP_SECS/CAP_CHANNEL env)"},
     {"label": "Evil Twin/Beacon 탐지", "alias": "detect", "prefix": "python3 detector/et_detector.py", "group": "탐지",
      "allow_args": True, "root": True, "desc": "pcap 분석으로 Evil Twin·Beacon Flood 탐지 (인자로 pcap 경로)"},
-    {"label": "공격 중지", "alias": "stop", "prefix": "bash dashboard_html/et_stop.sh", "group": "조회",
+    {"label": "공격 중지", "alias": "stop", "prefix": "bash et_stop.sh", "group": "조회",
      "allow_args": True, "root": True, "desc": "실행 중인 공격 중지 (stop all = 피해 AP까지)"},
     {"label": "무선 인터페이스", "alias": "iface", "prefix": "iw dev", "group": "조회",
      "desc": "무선 인터페이스 목록"},

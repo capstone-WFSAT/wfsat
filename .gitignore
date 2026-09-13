@@ -8,3 +8,6 @@ desktop.ini
 .dropbox*
 .idea
 .claude
+# 파이썬 바이트코드 캐시(자동 생성물)
+__pycache__/
+*.pyc
