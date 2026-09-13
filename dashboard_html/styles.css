@@ -2327,6 +2327,16 @@ footer button {
 /* help 출력 블록 */
 .exec-entry.is-help .exec-cmd { margin-bottom: 8px; }
 
+/* 트랙(공격 종류) 라벨 */
+.exec-help-track {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: var(--cyan);
+  font-family: inherit;
+}
+
 /* 진행 단계 표시(dots) */
 .exec-steps {
   display: flex;

@@ -1346,7 +1346,8 @@
     const RAN_KEY = "wfsat.ranSteps";
     const STEP_KEYS = [
       "bash lab_victim_ap.sh", "bash et_scan.sh",
-      "bash et_sniffing_attack.sh", "python3 detector/et_detector.py"
+      "bash et_sniffing_attack.sh", "python3 detector/et_detector.py",
+      "bash et_beacon_flood.sh", "bash et_capture.sh"
     ];
     let ranSteps = new Set();
     try {
@@ -1567,7 +1568,8 @@
     // ── 순차 진행 단계 정의 ──────────────────────────────
     // 각 단계는 done(state) 가 true 가 되면 완료로 보고 다음 단계로 넘어간다.
     // 신호가 없는 단계(AP 띄우기 등)는 사용자가 그 명령을 실제로 실행했는지로 판단한다.
-    const STEPS = [
+    // ── 트랙 1: Evil Twin (스니핑) ─────────────────────────
+    const STEPS_EVIL = [
       {
         key: "ap", stage: "setup", name: "피해 AP",
         title: "① 실습용 피해 AP 띄우기",
@@ -1584,32 +1586,90 @@
           { cmd: "attack", desc: "가짜 AP + deauth + 스니퍼 실행" }
         ],
         status: () => "피해 AP 준비 완료(대상 자동 등록). 이제 공격을 시작하세요.",
-        done: (s) => s.attackEver || s.ranAttack || s.detectRan || s.hasFindings
+        done: (s) => s.attackEver || s.ranAttack || s.detectRan || s.evilFindings > 0
       },
       {
         key: "detect", stage: "detect", name: "탐지",
         title: "③ Evil Twin 탐지",
         desc: "공격이 도는 동안 수집된 pcap을 분석해 가짜 AP를 탐지합니다. 탐지를 한 번 실행하면 다음 단계로 넘어갑니다.",
         actions: [
-          { cmd: "detect", desc: "pcap 경로를 붙여 실행 (예: detect capture.pcap --json /tmp/et_logs/detect.json)" }
+          { cmd: "capture", desc: "① 관리 프레임 캡처 → pcap" },
+          { cmd: "detect", desc: "② pcap 분석 (예: detect /tmp/et_logs/capture_*.pcap --json /tmp/et_logs/detect.json)" }
         ],
         status: (s) => s.attackRunning
-          ? ("공격 진행 중" + (s.essid ? " (대상 " + s.essid + (s.elapsedText ? ", 경과 " + s.elapsedText : "") + ")" : "") + ". 이제 탐지를 실행하세요.")
+          ? ("공격 진행 중" + (s.essid ? " (대상 " + s.essid + (s.elapsedText ? ", 경과 " + s.elapsedText : "") + ")" : "") + ". 캡처 후 탐지를 실행하세요.")
           : "공격 기록이 있습니다. 수집된 pcap으로 탐지를 실행하세요.",
-        done: (s) => s.detectRan || s.ranDetect || s.hasFindings
+        done: (s) => s.evilFindings > 0
       },
       {
         key: "defense", stage: "defense", name: "방어",
         title: "④ 방어 조치",
         desc: "탐지된 위조 BSSID를 차단하고, 정상 AP의 BSSID·채널을 확인해 클라이언트를 보호합니다. PMF(802.11w) 적용도 검토하세요.",
-        actions: [{ cmd: "config", desc: "정상 AP 설정 확인" }],
-        status: (s) => s.hasFindings
-          ? ("Evil Twin " + s.findingCount + "건 탐지됨" + (s.creds ? ", 자격증명 탈취 정황도 있습니다." : ".") + " 방어 조치로 마무리하세요.")
+        actions: [
+          { cmd: "config", desc: "정상 AP 설정 확인" },
+          { cmd: "stop", desc: "공격 중지 (정리)" }
+        ],
+        status: (s) => s.evilFindings > 0
+          ? ("Evil Twin " + s.evilFindings + "건 탐지됨" + (s.creds ? ", 자격증명 탈취 정황도 있습니다." : ".") + " 방어 조치로 마무리하세요.")
           : "탐지를 마쳤습니다. 위조 AP 차단 등 방어 조치로 마무리하세요.",
         note: "방어 절차 자세히 → docs/evil-twin-defense.md",
         done: () => false
       }
     ];
+
+    // ── 트랙 2: Beacon Flood ──────────────────────────────
+    const STEPS_BEACON = [
+      {
+        key: "beacon", stage: "attack", name: "Flood 실행",
+        title: "① Beacon Flood 실행",
+        desc: "고정 이름+숫자(예: Free_WiFi_1 … Free_WiFi_30)의 가짜 SSID를 대량 송출합니다. 옵션은 env로: BF_BASE, BF_COUNT, BF_PPS, BF_CHANNEL.",
+        actions: [{ cmd: "beacon", desc: "가짜 SSID 대량 송출 시작" }],
+        status: () => "아직 시작 전입니다. beacon 으로 가짜 SSID 송출을 시작하세요.",
+        done: (s) => s.ranBeacon || s.dosBeacon || s.ranCapture || s.beaconFindings > 0
+      },
+      {
+        key: "capture", stage: "detect", name: "캡처",
+        title: "② 비콘 캡처",
+        desc: "탐지를 위해 관리 프레임(beacon)을 몇 초간 캡처해 pcap으로 저장합니다. flood 중인 어댑터와 겹치지 않게 다른 어댑터를 쓰는 게 좋습니다(어댑터가 2개뿐이면 잠깐 stop 후 캡처).",
+        actions: [{ cmd: "capture", desc: "관리 프레임 캡처 → pcap" }],
+        status: (s) => s.dosBeacon ? "Beacon Flood 진행 중. 이제 비콘을 캡처하세요." : "송출한 비콘을 캡처하세요.",
+        done: (s) => s.ranCapture || s.beaconFindings > 0
+      },
+      {
+        key: "detect", stage: "detect", name: "탐지",
+        title: "③ Beacon Flood 탐지",
+        desc: "캡처한 pcap을 분석합니다. 같은 base 이름의 숫자형 SSID가 서로 다른 BSSID로 다수(기본 8개+) 잡히면 Beacon Flood로 탐지됩니다(신호 S4).",
+        actions: [
+          { cmd: "detect", desc: "pcap 분석 (예: detect /tmp/et_logs/capture_*.pcap --json /tmp/et_logs/detect.json)" }
+        ],
+        status: (s) => s.beaconFindings > 0
+          ? ("Beacon Flood " + s.beaconFindings + "건 탐지됨.")
+          : "캡처한 pcap으로 탐지를 실행하세요.",
+        done: (s) => s.beaconFindings > 0
+      },
+      {
+        key: "defense", stage: "defense", name: "정리",
+        title: "④ 방어 / 정리",
+        desc: "Beacon Flood는 DoS라 자격증명 탈취는 없습니다. 공격을 중지하고 주변 AP 목록·채널이 정상으로 돌아오는지 확인하세요. 실무 완화책: beacon rate-limit, OUI 필터, WIDS/WIPS.",
+        actions: [{ cmd: "stop", desc: "Beacon Flood 중지" }],
+        status: () => "탐지까지 마쳤습니다. stop 으로 정리하세요.",
+        done: () => false
+      }
+    ];
+
+    const TRACKS = {
+      evil: { label: "Evil Twin (스니핑)", steps: STEPS_EVIL },
+      beacon: { label: "Beacon Flood", steps: STEPS_BEACON }
+    };
+
+    // 현재 상태로부터 진행 중인 트랙을 추정. 아직 아무 것도 안 했으면 null.
+    function chooseTrack(state) {
+      if (state.dosBeacon || state.ranBeacon || state.ranCapture
+          || state.beaconFindings > 0) return "beacon";
+      if (state.attackEver || state.ranAp || state.ranAttack
+          || state.evilFindings > 0) return "evil";
+      return null;
+    }
 
     function readState() {
       const d = window.__wfsatLive || null;
@@ -1620,6 +1680,8 @@
       const events = Array.isArray(d && d.events) ? d.events : [];
       const attackEvent = events.some((e) => e && (
         e.type === "attack_start" || e.type === "client_connected" || e.type === "credential_captured"));
+      const dosMethod = (summary && summary.dos_method) || "";
+      const beaconFindings = findings.filter((f) => f && /beacon/i.test(f.type || "")).length;
       return {
         liveKnown: !!d,
         attackRunning: !!(summary && summary.status === "running"),
@@ -1627,29 +1689,34 @@
         detectRan: apTable.length > 0,
         hasFindings: findings.length > 0,
         findingCount: findings.length,
+        beaconFindings: beaconFindings,
+        evilFindings: findings.length - beaconFindings,
+        dosBeacon: /beacon/i.test(dosMethod),
         creds: (summary && Number(summary.credentials_captured) > 0)
           || events.some((e) => e && e.type === "credential_captured"),
         essid: (summary && summary.essid) || (findings[0] && findings[0].ssid) || "",
         elapsedText: summary ? fmtElapsed(summary.elapsed_seconds) : "",
         ranAp: ranSteps.has("bash lab_victim_ap.sh"),
         ranAttack: ranSteps.has("bash et_sniffing_attack.sh"),
-        ranDetect: ranSteps.has("python3 detector/et_detector.py")
+        ranDetect: ranSteps.has("python3 detector/et_detector.py"),
+        ranBeacon: ranSteps.has("bash et_beacon_flood.sh"),
+        ranCapture: ranSteps.has("bash et_capture.sh")
       };
     }
 
     // 완료되지 않은 첫 단계 = 현재 단계
-    function currentStepIndex(state) {
-      for (let i = 0; i < STEPS.length; i++) {
-        if (!STEPS[i].done(state)) return i;
+    function currentStepIndex(steps, state) {
+      for (let i = 0; i < steps.length; i++) {
+        if (!steps[i].done(state)) return i;
       }
-      return STEPS.length - 1;
+      return steps.length - 1;
     }
 
     // 진행 표시용 점(dots) — 현재 단계까지의 위치만 알려주고 명령은 감춘다
-    function makeStepper(idx, state) {
+    function makeStepper(steps, idx, state) {
       const bar = document.createElement("div");
       bar.className = "exec-steps";
-      STEPS.forEach((st, i) => {
+      steps.forEach((st, i) => {
         const dot = document.createElement("span");
         const doneMark = st.done(state);
         dot.className = "exec-step-dot"
@@ -1661,22 +1728,65 @@
       return bar;
     }
 
-    function printHelp() {
+    // 공격 선택 화면(아직 어떤 공격도 시작 안 했을 때)
+    function renderChooser(wrap, state) {
+      const now = document.createElement("div");
+      now.className = "exec-help-now stage-setup";
+      const title = document.createElement("p");
+      title.className = "exec-help-now-title";
+      title.textContent = "어떤 공격을 실습할까요?";
+      now.appendChild(title);
+
+      if (!state.liveKnown) {
+        const warn = document.createElement("p");
+        warn.className = "exec-help-note";
+        warn.textContent = "※ 실습 데이터를 아직 못 불러왔습니다. 실습 모드에서 잠시 후 다시 help 를 입력하면 진행이 반영됩니다.";
+        now.appendChild(warn);
+      }
+
+      const p = document.createElement("p");
+      p.className = "exec-help-next";
+      p.textContent = "아래에서 첫 명령을 고르면 그 공격 흐름으로 안내합니다. (또는 help evil / help beacon)";
+      now.appendChild(p);
+
+      const row = document.createElement("div");
+      row.className = "exec-help-actions";
+      row.appendChild(makeCmdButton("ap", "Evil Twin — ① 피해 AP 띄우기"));
+      row.appendChild(makeCmdButton("beacon", "Beacon Flood — ① 가짜 SSID 대량 송출"));
+      now.appendChild(row);
+
+      wrap.appendChild(now);
+    }
+
+    function printHelp(forceTrack) {
       clearEmpty();
       const state = readState();
-      const idx = currentStepIndex(state);
-      const step = STEPS[idx];
 
       const wrap = document.createElement("div");
       wrap.className = "exec-entry is-help";
-
       const cmdEl = document.createElement("code");
       cmdEl.className = "exec-cmd";
-      cmdEl.textContent = "help";
+      cmdEl.textContent = "help" + (forceTrack ? " " + forceTrack : "");
       wrap.appendChild(cmdEl);
 
-      // 진행 위치
-      wrap.appendChild(makeStepper(idx, state));
+      const track = forceTrack || chooseTrack(state);
+      if (!track || !TRACKS[track]) {
+        renderChooser(wrap, state);
+        logEl.appendChild(wrap);
+        logEl.scrollTop = logEl.scrollHeight;
+        return;
+      }
+
+      const steps = TRACKS[track].steps;
+      const idx = currentStepIndex(steps, state);
+      const step = steps[idx];
+
+      // 트랙 라벨 + 진행 위치
+      const trackLine = document.createElement("p");
+      trackLine.className = "exec-help-track";
+      trackLine.textContent = "▷ " + TRACKS[track].label + " 흐름";
+      wrap.appendChild(trackLine);
+      wrap.appendChild(makeStepper(steps, idx, state));
 
       // 현재 단계만 표시
       const now = document.createElement("div");
@@ -1684,7 +1794,7 @@
 
       const title = document.createElement("p");
       title.className = "exec-help-now-title";
-      title.textContent = "단계 " + (idx + 1) + "/" + STEPS.length + " · " + step.title;
+      title.textContent = "단계 " + (idx + 1) + "/" + steps.length + " · " + step.title;
       now.appendChild(title);
 
       if (!state.liveKnown) {
@@ -1719,8 +1829,8 @@
 
       const hint = document.createElement("p");
       hint.className = "exec-help-hint";
-      hint.textContent = idx < STEPS.length - 1
-        ? "이 단계를 마치면 다음에 help 를 입력할 때 다음 단계를 안내합니다. (처음부터: reset)"
+      hint.textContent = idx < steps.length - 1
+        ? "이 단계를 마치면 다음에 help 를 입력할 때 다음 단계를 안내합니다. (다른 공격: help evil / help beacon · 처음부터: reset)"
         : "마지막 단계입니다. 처음부터 다시 하려면 reset 을 입력하세요.";
       now.appendChild(hint);
 
@@ -1747,6 +1857,14 @@
       if (HELP_WORDS.has(low)) {
         input.value = "";
         printHelp();
+        input.focus();
+        return;
+      }
+      // help evil / help beacon → 특정 공격 트랙 강제
+      const mHelp = low.match(/^(?:help|도움말|\?)\s+(evil|beacon)$/);
+      if (mHelp) {
+        input.value = "";
+        printHelp(mHelp[1]);
         input.focus();
         return;
       }
