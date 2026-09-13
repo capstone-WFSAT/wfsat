@@ -27,6 +27,7 @@
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -71,6 +72,12 @@ WEIGHT_S3 = 0.15
 SCORE_HIGH = 0.6
 SCORE_MEDIUM = 0.3
 
+# Beacon flood: 같은 base 이름 + 숫자 접미사(예: Free_WiFi_1, Free_WiFi_2 …)의
+# SSID 가 서로 다른 BSSID 로 이 개수 이상 관측되면 flood 로 판정한다.
+BEACON_FLOOD_MIN = 8
+# 뒤쪽 숫자(및 그 앞의 공백/_/- 구분자)를 떼어 base 이름을 얻는 정규식.
+_SSID_TRAILING_NUM = re.compile(r"^(.*?)[\s_\-]*\d+$")
+
 # RSN AKM suite 식별자
 AKM_SAE = b"\x00\x0f\xac\x08"  # WPA3-SAE
 
@@ -98,6 +105,7 @@ class AccessPoint:
     s1_zero_width: bool = False
     s2_twin_bssid: bool = False
     s3_downgrade: bool = False
+    s4_beacon_flood: bool = False  # beacon flood 그룹의 일원
     # 부가 정보
     zero_width_found: list = field(default_factory=list)
     twin_of: list = field(default_factory=list)      # 쌍둥이로 지목된 상대 BSSID
@@ -365,6 +373,7 @@ def to_dashboard_rows(aps: dict) -> list:
                 "S1_zero_width": ap.s1_zero_width,
                 "S2_twin_bssid": ap.s2_twin_bssid,
                 "S3_downgrade": ap.s3_downgrade,
+                "S4_beacon_flood": ap.s4_beacon_flood,
             },
             "ssid_raw_hex": ap.ssid_raw.hex(),
             "reasons": ap.reasons,
@@ -377,6 +386,10 @@ def build_findings(aps: dict) -> list:
     findings = []
     for ap in aps.values():
         if ap.status == STATUS_NORMAL:
+            continue
+        # beacon flood 로만 걸린 AP 는 별도 집계 finding 으로 처리하므로 여기선 제외
+        if ap.s4_beacon_flood and not (
+                ap.s1_zero_width or ap.s2_twin_bssid or ap.s3_downgrade):
             continue
         severity = "HIGH" if ap.status == STATUS_ATTACK else "MEDIUM"
         findings.append({
@@ -391,6 +404,64 @@ def build_findings(aps: dict) -> list:
             "reasons": ap.reasons,
         })
     findings.sort(key=lambda f: (f["severity"] != "HIGH", -f["score"]))
+    return findings
+
+
+def ssid_base(name: str):
+    """SSID 에서 뒤쪽 숫자 접미사를 떼어 base 이름을 돌려준다.
+    숫자로 끝나지 않으면(=번호형 SSID 가 아니면) None."""
+    if not name:
+        return None
+    m = _SSID_TRAILING_NUM.match(name)
+    if not m:
+        return None
+    base = m.group(1).strip()
+    return base or None
+
+
+def detect_beacon_flood(aps: dict) -> list:
+    """고정 base 이름 + 숫자 SSID 가 여러 BSSID 로 대량 관측되면 beacon flood 로 판정.
+    해당 AP 들의 상태/점수를 갱신하고, base 그룹당 하나의 집계 finding 을 돌려준다."""
+    groups: dict[str, list] = defaultdict(list)
+    for ap in aps.values():
+        base = ssid_base(ap.ssid_norm)
+        if base:
+            groups[base].append(ap)
+
+    findings = []
+    for base, members in groups.items():
+        bssids = {m.bssid for m in members}
+        if len(bssids) < BEACON_FLOOD_MIN:
+            continue
+        count = len(bssids)
+        for m in members:
+            m.s4_beacon_flood = True
+            m.status = STATUS_ATTACK
+            if m.score < 0.7:
+                m.score = 0.7
+            m.reasons.append(f"S4: beacon flood group '{base}*' ({count} BSSIDs)")
+        channels = sorted({m.channel for m in members if m.channel is not None})
+        samples = sorted(m.ssid_norm for m in members)[:5]
+        findings.append({
+            "type": "Beacon Flood",
+            "severity": "HIGH",
+            "ssid": f"{base}* ({count}개)",
+            "suspect_bssid": sorted(b.upper() for b in bssids)[0],
+            "legit_bssid": [],
+            "channel": channels[0] if channels else None,
+            "enc": "-",
+            "score": round(min(1.0, count / 20.0 + 0.5), 3),
+            "count": count,
+            "base": base,
+            "channels": channels,
+            "samples": samples,
+            "reasons": [
+                f"동일 base 이름 '{base}' 의 숫자형 SSID 가 서로 다른 BSSID {count}개로 "
+                f"관측됨 (임계값 {BEACON_FLOOD_MIN}) — beacon flood 로 판단",
+                f"예시 SSID: {', '.join(samples)}",
+            ],
+        })
+    findings.sort(key=lambda f: -f["count"])
     return findings
 
 
@@ -445,9 +516,12 @@ def main() -> int:
     aps = parse_pcap(args.pcap)
     apply_signals(aps)
     score_aps(aps)
+    # beacon flood 는 score_aps 뒤에 판정(멤버 상태/점수를 덮어써야 하므로).
+    bf_findings = detect_beacon_flood(aps)
 
     rows = to_dashboard_rows(aps)
-    findings = build_findings(aps)
+    findings = build_findings(aps) + bf_findings
+    findings.sort(key=lambda f: (f["severity"] != "HIGH", -f.get("score", 0)))
 
     if not args.quiet:
         print_report(aps, findings)
