@@ -162,43 +162,7 @@ ip -brief -4 addr
 
 > 공격 실행 시 `airmon-ng`/라우팅 변경으로 WiFi 관리 경로가 끊길 수 있다. 대시보드는 **공격에 안 쓰는 유선(eth0)** 으로 접속하는 것이 안정적이다.
 
-### 원격/외부 접속 — 다른 LAN(또는 인터넷)에서 접속
-서버(Kali)를 집에 두고 **다른 네트워크의 노트북**에서 대시보드를 볼 때. VM은 대개 NAT(예: VMware `192.168.x.x`) 뒤에 있어 라우터 포트포워딩은 까다롭다 → **밖으로 나가는 터널**이 NAT를 그냥 통과하므로 가장 쉽다. (모든 명령은 서버 Kali에서 실행한다.)
-
-| 방법 | 공개 URL | 인증 | 비고 |
-|---|---|---|---|
-| **Tailscale** (권장) | 없음(사설) | 계정 로그인 | 내 기기끼리만 통하는 VPN. 원격이지만 localhost처럼 사용 |
-| ngrok | 있음 | `--basic-auth` 가능 | 가입 후 authtoken 1회 등록 필요 |
-| cloudflared 즉석 터널 | 있음 | **없음** | `trycloudflare` URL은 인증 불가 → 공개 노출 주의 |
-| SSH 포트포워딩 | 없음 | SSH 키 | 서버에 SSH로 닿을 수 있을 때(예: Tailscale SSH 경유) |
-
-**Tailscale (권장 — 공개 URL 없음, 내 기기끼리만):**
-```bash
-# 서버(Kali)와 노트북 양쪽에서
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-tailscale ip -4            # 서버의 100.x.x.x 확인
-# 노트북 브라우저: http://<서버 tailscale IP>:5000/   (브리지는 WFSAT_HOST=0.0.0.0)
-```
-
-**cloudflared 즉석 터널 (계정 불필요, 즉석 시연용):**
-```bash
-# apt 저장소에 없으므로 공식 바이너리 직접 설치 (arm64면 amd64→arm64)
-curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
-cloudflared tunnel --url http://localhost:5000     # 출력되는 https://xxxx.trycloudflare.com 접속
-```
-
-**ngrok (인증 가능):**
-```bash
-ngrok config add-authtoken <ngrok 사이트 토큰>
-ngrok http 5000 --basic-auth "demo:비밀번호"
-```
-
-> 🔐 **원격 노출 시 보안 (반드시 읽을 것)** — 명령 콘솔(`/api/exec`)은 인증이 없다. 공개 URL(cloudflared/ngrok 무인증)로 열면 **URL을 아는 누구나 서버에서 공격 명령을 실행**할 수 있다. 원격 시연에서는:
-> - **화면만 보여줄 때** → 콘솔을 끄고 터널로만 연다: `WFSAT_HOST=127.0.0.1 WFSAT_ENABLE_EXEC=0 python3 bridge.py` (127.0.0.1이면 LAN 노출도 없이 터널로만 접근)
-> - **원격에서 명령까지 조작할 때** → **Tailscale**(사설) 또는 **인증 붙은 터널**(ngrok `--basic-auth`, Cloudflare Access)을 쓴다. 무인증 공개 URL로 콘솔을 켜두지 말 것.
-> - 현재 콘솔 활성 여부 확인: `curl -s http://localhost:5000/api/exec/commands | head -c 60` → `"enabled": true/false`
+> 다른 LAN(또는 인터넷)에서 접속하려면 맨 아래 **"원격/외부 접속"** 참고.
 
 ---
 
@@ -284,3 +248,44 @@ sudo interface=<공격 어댑터> bash et_sniffing_attack.sh
   AIRGEDDON_WINDOWS_HANDLING=tmux interface=wlanatk bash et_sniffing_attack.sh
   ```
   tmux 창 전환: `Ctrl+b` → `n`/`p` 또는 숫자키.
+
+---
+
+## 원격/외부 접속 — 다른 LAN(또는 인터넷)에서 접속
+
+서버(Kali)를 집에 두고 **다른 네트워크의 노트북**에서 대시보드를 볼 때. VM은 대개 NAT(예: VMware `192.168.x.x`) 뒤에 있어 라우터 포트포워딩은 까다롭다 → **밖으로 나가는 터널**이 NAT를 그냥 통과하므로 가장 쉽다. (모든 명령은 서버 Kali에서 실행한다.)
+
+| 방법 | 공개 URL | 인증 | 비고 |
+|---|---|---|---|
+| **Tailscale** (권장) | 없음(사설) | 계정 로그인 | 내 기기끼리만 통하는 VPN. 원격이지만 localhost처럼 사용 |
+| ngrok | 있음 | `--basic-auth` 가능 | 가입 후 authtoken 1회 등록 필요 |
+| cloudflared 즉석 터널 | 있음 | **없음** | `trycloudflare` URL은 인증 불가 → 공개 노출 주의 |
+| SSH 포트포워딩 | 없음 | SSH 키 | 서버에 SSH로 닿을 수 있을 때(예: Tailscale SSH 경유) |
+
+**Tailscale (권장 — 공개 URL 없음, 내 기기끼리만):**
+```bash
+# 서버(Kali)와 노트북 양쪽에서
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4            # 서버의 100.x.x.x 확인
+# 노트북 브라우저: http://<서버 tailscale IP>:5000/   (브리지는 WFSAT_HOST=0.0.0.0)
+```
+
+**cloudflared 즉석 터널 (계정 불필요, 즉석 시연용):**
+```bash
+# apt 저장소에 없으므로 공식 바이너리 직접 설치 (arm64면 amd64→arm64)
+curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
+cloudflared tunnel --url http://localhost:5000     # 출력되는 https://xxxx.trycloudflare.com 접속
+```
+
+**ngrok (인증 가능):**
+```bash
+ngrok config add-authtoken <ngrok 사이트 토큰>
+ngrok http 5000 --basic-auth "demo:비밀번호"
+```
+
+> 🔐 **원격 노출 시 보안 (반드시 읽을 것)** — 명령 콘솔(`/api/exec`)은 인증이 없다. 공개 URL(cloudflared/ngrok 무인증)로 열면 **URL을 아는 누구나 서버에서 공격 명령을 실행**할 수 있다. 원격 시연에서는:
+> - **화면만 보여줄 때** → 콘솔을 끄고 터널로만 연다: `WFSAT_HOST=127.0.0.1 WFSAT_ENABLE_EXEC=0 python3 bridge.py` (127.0.0.1이면 LAN 노출도 없이 터널로만 접근)
+> - **원격에서 명령까지 조작할 때** → **Tailscale**(사설) 또는 **인증 붙은 터널**(ngrok `--basic-auth`, Cloudflare Access)을 쓴다. 무인증 공개 URL로 콘솔을 켜두지 말 것.
+> - 현재 콘솔 활성 여부 확인: `curl -s http://localhost:5000/api/exec/commands | head -c 60` → `"enabled": true/false`
