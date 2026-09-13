@@ -11,13 +11,21 @@
   <a class="skip-link" href="#mainContent">본문으로 바로가기</a>
 
   <div class="app-shell">
-    <aside class="sidebar" aria-label="공격 시나리오 선택">
+    <button id="sidebarExpand" class="sidebar-expand" type="button"
+            aria-label="공격 라이브러리 열기" title="공격 라이브러리 열기" aria-expanded="true">
+      <span aria-hidden="true">☰</span>
+    </button>
+    <aside id="sidebar" class="sidebar" aria-label="공격 시나리오 선택">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">W</div>
         <div>
           <strong>WFSAT</strong>
           <span>Wireless Security Lab</span>
         </div>
+        <button id="sidebarToggle" class="sidebar-toggle" type="button"
+                aria-label="공격 라이브러리 접기" title="접기" aria-controls="sidebar" aria-expanded="true">
+          <span aria-hidden="true">«</span>
+        </button>
       </div>
 
       <div class="nav-heading">
@@ -246,23 +254,6 @@
             <div id="identityList" class="identity-list"></div>
           </article>
           </div><!-- /.advanced-lab-main -->
-
-          <aside class="panel exec-console-panel" aria-labelledby="execHeading">
-            <div class="panel-heading compact">
-              <div><p class="section-kicker">D · SERVER CONSOLE</p><h3 id="execHeading">명령 콘솔</h3></div>
-              <span id="execStatusBadge" class="live-count" data-state="connecting">확인 중…</span>
-            </div>
-            <p class="exec-note">브리지 서버(칼리)에서 <strong>허용된 명령만</strong> 실행합니다. 아래 버튼으로 넣거나 직접 입력하세요.</p>
-            <div id="execChips" class="exec-chips" aria-label="빠른 명령"></div>
-            <div id="execLog" class="exec-log" role="log" aria-live="polite" aria-label="명령 실행 결과">
-              <p class="exec-log-empty">아직 실행한 명령이 없습니다.</p>
-            </div>
-            <form id="execForm" class="exec-form" autocomplete="off">
-              <input id="execInput" class="exec-input" type="text" spellcheck="false"
-                     placeholder="예: bash et_scan.sh" aria-label="실행할 명령" disabled>
-              <button id="execSend" class="exec-send" type="submit" disabled>실행</button>
-            </form>
-          </aside>
         </div>
       </section>
 
@@ -323,6 +314,8 @@
           <span id="liveConnBadge" class="live-conn-badge" data-state="connecting">연결 확인 중…</span>
         </div>
 
+        <div class="live-layout">
+        <div class="live-main">
         <section class="panel live-status-panel" aria-labelledby="liveStatusHeading">
           <div class="panel-heading compact">
             <div>
@@ -376,6 +369,25 @@
         </section>
 
         <p class="live-updated">마지막 갱신 <span id="liveUpdated">—</span></p>
+        </div><!-- /.live-main -->
+
+          <aside class="panel exec-console-panel" aria-labelledby="execHeading">
+            <div class="panel-heading compact">
+              <div><p class="section-kicker">D · SERVER CONSOLE</p><h3 id="execHeading">명령 콘솔</h3></div>
+              <span id="execStatusBadge" class="live-count" data-state="connecting">확인 중…</span>
+            </div>
+            <p class="exec-note">브리지 서버(칼리)에서 <strong>허용된 명령만</strong> 실행합니다. 아래 버튼으로 넣거나 직접 입력하세요.</p>
+            <div id="execChips" class="exec-chips" aria-label="빠른 명령"></div>
+            <div id="execLog" class="exec-log" role="log" aria-live="polite" aria-label="명령 실행 결과">
+              <p class="exec-log-empty">아직 실행한 명령이 없습니다.</p>
+            </div>
+            <form id="execForm" class="exec-form" autocomplete="off">
+              <input id="execInput" class="exec-input" type="text" spellcheck="false"
+                     placeholder="예: bash et_scan.sh" aria-label="실행할 명령" disabled>
+              <button id="execSend" class="exec-send" type="submit" disabled>실행</button>
+            </form>
+          </aside>
+        </div><!-- /.live-layout -->
       </section>
 
       <footer>

@@ -1283,7 +1283,40 @@
     });
   })();
 
-  // ── 심화 탭: 서버 명령 콘솔(화이트리스트) ───────────────────
+  // ── 사이드바(공격 라이브러리) 접기/펼치기 ───────────────────
+  (function () {
+    const shell = document.querySelector(".app-shell");
+    const toggleBtn = $("sidebarToggle");
+    const expandBtn = $("sidebarExpand");
+    if (!shell || !toggleBtn || !expandBtn) return;
+
+    const STORAGE_KEY = "wfsat.sidebarCollapsed";
+
+    function apply(collapsed) {
+      shell.classList.toggle("sidebar-collapsed", collapsed);
+      toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+      expandBtn.setAttribute("aria-expanded", String(!collapsed));
+      try { localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0"); } catch (e) {}
+    }
+
+    function isCollapsed() { return shell.classList.contains("sidebar-collapsed"); }
+
+    toggleBtn.addEventListener("click", () => {
+      apply(true);
+      expandBtn.focus();
+    });
+    expandBtn.addEventListener("click", () => {
+      apply(false);
+      toggleBtn.focus();
+    });
+
+    // 저장된 상태 복원
+    try {
+      if (localStorage.getItem(STORAGE_KEY) === "1") apply(true);
+    } catch (e) {}
+  })();
+
+  // ── 실습 탭: 서버 명령 콘솔(화이트리스트) ───────────────────
   (function () {
     const EXEC_ENDPOINT = "/api/exec";
     const COMMANDS_ENDPOINT = "/api/exec/commands";

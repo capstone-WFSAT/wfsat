@@ -96,6 +96,7 @@ summary:focus-visible,
   display: grid;
   grid-template-columns: 266px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 0.25s ease;
 }
 
 .sidebar {
@@ -110,7 +111,62 @@ summary:focus-visible,
   border-right: 1px solid var(--border);
   background: rgba(6, 22, 38, 0.94);
   backdrop-filter: blur(20px);
+  transition: transform 0.25s ease, opacity 0.2s ease;
 }
+
+/* ── 사이드바 접기/펼치기 ─────────────────────────────────── */
+.sidebar-toggle {
+  margin-left: auto;
+  align-self: flex-start;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(12, 30, 48, 0.7);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible { border-color: var(--cyan); color: var(--cyan); background: rgba(12, 40, 60, 0.9); }
+
+.sidebar-expand {
+  position: fixed;
+  top: 16px;
+  left: 14px;
+  z-index: 40;
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(8, 24, 40, 0.94);
+  backdrop-filter: blur(12px);
+  color: var(--cyan);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, background 0.15s;
+}
+.sidebar-expand:hover,
+.sidebar-expand:focus-visible { border-color: var(--cyan); background: rgba(12, 40, 60, 0.96); }
+
+/* 접힌 상태 */
+.app-shell.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.app-shell.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+  border-right-color: transparent;
+}
+.app-shell.sidebar-collapsed .sidebar-expand { display: grid; }
 
 .brand {
   display: flex;
@@ -2135,10 +2191,6 @@ footer button {
 .advanced-lab-content {
   padding: 0 12px 12px;
   border-top: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-  gap: 12px;
-  align-items: start;
 }
 .advanced-lab-main { min-width: 0; }
 .advanced-lab-content .metrics-grid { margin-top: 12px; }
@@ -2337,6 +2389,7 @@ footer button {
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
+  .app-shell.sidebar-collapsed .sidebar { display: none; transform: none; }
   .brand { padding-bottom: 13px; }
   .simulation-notice { position: absolute; top: 18px; right: 16px; width: 220px; margin: 0; }
   .nav-heading { margin-top: 2px; }
@@ -2351,6 +2404,7 @@ footer button {
   .primary-grid,
   .analysis-grid { grid-template-columns: 1fr; }
   .advanced-lab-content { grid-template-columns: 1fr; }
+  .live-layout { grid-template-columns: 1fr; }
   .exec-console-panel { position: static; max-height: none; }
   .evidence-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
   .evidence-panel > .panel-heading { grid-column: 1 / -1; }
@@ -2496,6 +2550,21 @@ footer button {
 .live-view[hidden] {
   display: none;
 }
+
+/* 실습 화면: 라이브 데이터(좌) + 명령 콘솔(우, 스크롤해도 고정) */
+.live-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 20px;
+  align-items: start;
+}
+.live-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.live-layout .exec-console-panel { margin-top: 0; }
 
 /* 라이브 패널도 학습 화면의 다른 박스와 동일한 내부 여백(18px)을 갖도록 */
 .live-flow-panel,
