@@ -1110,7 +1110,8 @@
         const flags = [
           sig.S1_zero_width ? "S1" : null,
           sig.S2_twin_bssid ? "S2" : null,
-          sig.S3_downgrade ? "S3" : null
+          sig.S3_downgrade ? "S3" : null,
+          sig.S4_beacon_flood ? "BF" : null
         ].filter(Boolean).join(" ") || "—";
         const score = (typeof ap.score === "number") ? ap.score.toFixed(2) : (ap.score || "—");
         return `<tr class="detect-tone-${tone}">
