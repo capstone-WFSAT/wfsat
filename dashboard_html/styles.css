@@ -2629,6 +2629,7 @@ footer button {
 /* --- 빈 상태 --- */
 .live-empty {
   padding: 20px;
+  margin-bottom: 12px;
   color: var(--muted);
   font-size: 0.9rem;
   text-align: center;
@@ -2636,6 +2637,8 @@ footer button {
   border-radius: var(--radius-md);
   background: var(--panel-soft);
 }
+/* 안내 박스가 마지막 요소일 때는 아래 여백 불필요 */
+.live-empty:last-child { margin-bottom: 0; }
 .live-empty code {
   color: var(--cyan);
   background: rgba(52, 200, 255, 0.1);
