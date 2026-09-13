@@ -61,24 +61,39 @@ EXEC_ENABLED = os.environ.get("WFSAT_ENABLE_EXEC", "1").strip().lower() not in (
 EXEC_TIMEOUT = int(os.environ.get("WFSAT_EXEC_TIMEOUT", "60"))
 MAX_OUTPUT = 20000  # 응답에 담을 stdout/stderr 최대 길이(문자)
 
+# root 권한이 필요한 명령 앞에 자동으로 붙일 sudo 커맨드.
+#   - 브리지를 root 로 실행 중이면(geteuid()==0) 아예 붙이지 않는다.
+#   - 기본값 "sudo -n" 은 비밀번호를 묻지 않는(non-interactive) 모드. NOPASSWD
+#     sudoers 가 설정돼 있어야 통과하며, 없으면 즉시 에러(멈추지 않음).
+#   - WFSAT_SUDO="" 로 두면 자동 sudo 를 완전히 끈다.
+SUDO_CMD = os.environ.get("WFSAT_SUDO", "sudo -n")
+
+
+def _is_root():
+    geteuid = getattr(os, "geteuid", None)
+    return geteuid is not None and geteuid() == 0
+
 # 실행 허용 명령 화이트리스트.
 #   prefix     : 명령이 이 문자열과 정확히 일치하거나(allow_args=False),
 #                이 문자열 + 공백으로 시작해야(allow_args=True) 허용된다.
 #   allow_args : True 면 prefix 뒤에 인자를 덧붙일 수 있다(프로그램 자체는 고정).
 #   background : True 면 기다리지 않고 백그라운드로 실행하고 즉시 PID 를 돌려준다
 #                (오래 도는 공격/AP 스크립트용). 출력은 로그 파일로 리다이렉트된다.
-# 명령 앞의 "sudo " 접두사는 허용된다(브리지를 root 로 실행하지 않은 경우 대비).
+#   root       : True 면 root 권한이 필요한 명령이다. 브리지가 root 가 아니면
+#                실행 시 자동으로 SUDO_CMD(기본 "sudo -n")를 앞에 붙인다.
+#                → 대시보드에서 "sudo" 를 직접 칠 필요가 없다.
+# 사용자가 명령 앞에 "sudo " 를 붙여도 허용되며, 중복 없이 처리된다.
 ALLOWED_COMMANDS = [
     {"label": "의존성 점검", "prefix": "bash et_check_deps.sh",
-     "allow_args": True, "desc": "필요 도구 점검/설치 (--check-only 로 점검만)"},
+     "allow_args": True, "root": True, "desc": "필요 도구 점검/설치 (--check-only 로 점검만)"},
     {"label": "AP 스캔", "prefix": "bash et_scan.sh",
-     "allow_args": True, "desc": "주변 AP 스캔"},
+     "allow_args": True, "root": True, "desc": "주변 AP 스캔"},
     {"label": "Evil Twin 탐지", "prefix": "python3 detector/et_detector.py",
-     "allow_args": True, "desc": "pcap 분석으로 Evil Twin 탐지 (인자로 pcap 경로)"},
+     "allow_args": True, "root": True, "desc": "pcap 분석으로 Evil Twin 탐지 (인자로 pcap 경로)"},
     {"label": "피해 AP 실행", "prefix": "bash lab_victim_ap.sh",
-     "allow_args": True, "background": True, "desc": "실습용 피해 AP 생성 (백그라운드)"},
+     "allow_args": True, "background": True, "root": True, "desc": "실습용 피해 AP 생성 (백그라운드)"},
     {"label": "스니핑 공격 실행", "prefix": "bash et_sniffing_attack.sh",
-     "allow_args": True, "background": True, "desc": "가짜 AP+deauth+스니퍼 (백그라운드)"},
+     "allow_args": True, "background": True, "root": True, "desc": "가짜 AP+deauth+스니퍼 (백그라운드)"},
     {"label": "무선 인터페이스", "prefix": "iw dev",
      "desc": "무선 인터페이스 목록"},
     {"label": "인터페이스 상태", "prefix": "iwconfig",
@@ -182,13 +197,24 @@ def run_command(cmd):
         return {"ok": False, "command": cmd,
                 "error": "허용되지 않은 명령입니다. 허용 목록의 명령만 실행할 수 있습니다."}
     try:
-        argv = shlex.split(cmd)
+        tokens = shlex.split(cmd)
     except ValueError as exc:
         return {"ok": False, "command": cmd,
                 "error": "명령을 해석할 수 없습니다: %s" % exc}
+    # 사용자가 직접 붙였을 수 있는 "sudo [옵션]" 접두사를 제거한다(중복 방지).
+    while tokens and tokens[0] == "sudo":
+        tokens.pop(0)
+        while tokens and tokens[0].startswith("-"):
+            tokens.pop(0)
+    # root 가 필요한 명령이면 브리지가 root 가 아닌 한 sudo 를 자동으로 붙인다.
+    if entry.get("root") and SUDO_CMD and not _is_root():
+        argv = shlex.split(SUDO_CMD) + tokens
+    else:
+        argv = tokens
+    eff_cmd = " ".join(shlex.quote(a) for a in argv)
     if entry.get("background"):
-        return _run_background(argv, cmd)
-    return _run_foreground(argv, cmd)
+        return _run_background(argv, eff_cmd)
+    return _run_foreground(argv, eff_cmd)
 
 
 def exec_commands_info():
@@ -414,6 +440,16 @@ def main():
               % EXEC_TIMEOUT)
         print("              !! binds %s - anyone reachable can run the "
               "whitelisted commands" % HOST)
+        if _is_root():
+            print(" Privilege  : running as root - root commands run directly "
+                  "(no sudo)")
+        elif SUDO_CMD:
+            print(" Privilege  : not root - root commands auto-prefixed with "
+                  "'%s'" % SUDO_CMD)
+            print("              -> needs NOPASSWD sudoers, or start with sudo")
+        else:
+            print(" Privilege  : not root and WFSAT_SUDO disabled - root "
+                  "commands will fail")
     else:
         print(" Exec API   : disabled (set WFSAT_ENABLE_EXEC=1 to enable)")
     print(" Log dir    : %s" % LOG_DIR)
