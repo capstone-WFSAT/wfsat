@@ -2301,6 +2301,129 @@ footer button {
 #execStatusBadge[data-state="disabled"],
 #execStatusBadge[data-state="error"] { color: var(--red, #ff6b6b); }
 
+/* help 안내 한 줄 + help 칩 */
+.exec-chip-help { border-color: var(--cyan); color: var(--cyan); }
+.exec-hint {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: inherit;
+}
+
+/* help 출력 블록 */
+.exec-entry.is-help .exec-cmd { margin-bottom: 8px; }
+
+/* 진행 단계 표시(dots) */
+.exec-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 9px;
+}
+.exec-step-dot {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: rgba(3, 12, 22, 0.5);
+  font-family: inherit;
+}
+.exec-step-dot.is-done { color: var(--green, #57d38c); border-color: rgba(87, 211, 140, 0.5); }
+.exec-step-dot.is-done::before { content: "✓ "; }
+.exec-step-dot.is-current {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: rgba(12, 40, 60, 0.85);
+}
+
+.exec-help-now {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 8px;
+  background: rgba(12, 30, 48, 0.55);
+  padding: 9px 11px;
+  margin-bottom: 10px;
+}
+.exec-help-now.stage-setup { border-left-color: var(--cyan); }
+.exec-help-now.stage-attack { border-left-color: var(--red, #ff6b6b); }
+.exec-help-now.stage-detect { border-left-color: var(--violet, #9d8bff); }
+.exec-help-now.stage-defense { border-left-color: var(--green, #57d38c); }
+.exec-help-now.stage-init { border-left-color: var(--muted); }
+.exec-help-now-title {
+  margin: 0 0 6px;
+  font-weight: 800;
+  color: var(--text);
+  font-family: inherit;
+}
+.exec-help-status {
+  margin: 0 0 6px;
+  font-weight: 700;
+  color: var(--cyan);
+  font-family: inherit;
+  line-height: 1.5;
+}
+.exec-help-next {
+  margin: 0;
+  color: var(--muted);
+  font-family: inherit;
+  line-height: 1.55;
+}
+.exec-help-note {
+  margin: 7px 0 0;
+  font-size: 11px;
+  color: var(--cyan);
+  font-family: inherit;
+}
+.exec-help-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: inherit;
+}
+.exec-help-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 9px;
+}
+.exec-help-cmd {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: rgba(3, 12, 22, 0.6);
+  border-radius: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.exec-help-cmd + .exec-help-cmd { margin-top: 5px; }
+.exec-help-cmd:hover,
+.exec-help-cmd:focus-visible { border-color: var(--cyan); background: rgba(12, 40, 60, 0.85); }
+.exec-help-cmd code {
+  display: block;
+  color: var(--cyan);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+.exec-help-cmd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+}
+.exec-help-cmd .exec-help-real {
+  margin-top: 3px;
+  color: var(--muted);
+  opacity: 0.7;
+  font-size: 10px;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
 .glossary-collapsible {
   margin-top: 12px;
   padding: 0;

@@ -1208,6 +1208,7 @@
 
     function renderLive(data) {
       lastData = data;
+      window.__wfsatLive = data; // 콘솔 help 가 현재 상황을 읽을 수 있도록 공유
       renderFlow(data);
       renderStatus(data && data.summary ? data.summary : null);
       renderEvents(data ? data.events : []);
@@ -1329,6 +1330,38 @@
     if (!form || !input || !logEl) return; // 콘솔 마크업이 없으면 아무것도 안 함
 
     let running = false;
+    let commandInfo = null; // /api/exec/commands 응답 보관 (help 목록에 사용)
+    const HELP_WORDS = new Set(["help", "?", "h", "도움말", "도움", "명령", "명령어"]);
+
+    // 단계별 진행 추적: 사용자가 실제로 실행한 단계 명령을 기억(신호가 없는 단계용).
+    const RAN_KEY = "wfsat.ranSteps";
+    const STEP_KEYS = [
+      "bash lab_victim_ap.sh", "bash et_scan.sh",
+      "bash et_sniffing_attack.sh", "python3 detector/et_detector.py"
+    ];
+    let ranSteps = new Set();
+    try {
+      const v = JSON.parse(localStorage.getItem(RAN_KEY) || "[]");
+      if (Array.isArray(v)) ranSteps = new Set(v);
+    } catch (e) {}
+
+    function markRan(cmd) {
+      let core = (cmd || "").trim();
+      while (core.toLowerCase().startsWith("sudo ")) core = core.slice(5).trimStart();
+      // 별칭이면 실제 명령으로 바꿔 STEP_KEYS(실제 prefix)와 비교
+      const first = core.split(/\s+/)[0];
+      const c = findCmd(first);
+      const resolved = c ? (c.prefix + core.slice(first.length)) : core;
+      let changed = false;
+      STEP_KEYS.forEach((k) => {
+        if (resolved === k || resolved.startsWith(k + " ")) {
+          if (!ranSteps.has(k)) { ranSteps.add(k); changed = true; }
+        }
+      });
+      if (changed) {
+        try { localStorage.setItem(RAN_KEY, JSON.stringify([...ranSteps])); } catch (e) {}
+      }
+    }
 
     function setBadge(startState, text) {
       if (!badge) return;
@@ -1404,6 +1437,7 @@
           data = { ok: false, error: "서버 응답을 해석할 수 없습니다 (" + res.status + ")" };
         }
         fillEntry(ref, data);
+        if (data && data.ok) markRan(cmd); // 성공한 단계 명령을 진행 상황에 반영
       } catch (err) {
         fillEntry(ref, { ok: false, error: "브리지 서버에 연결할 수 없습니다." });
       } finally {
@@ -1414,10 +1448,252 @@
       }
     }
 
+    // 별칭(scan) 또는 실제 명령(bash et_scan.sh)으로 명령 정보를 찾는다.
+    function findCmd(token) {
+      const list = (commandInfo && commandInfo.commands) || [];
+      return list.find((x) => x.alias && x.alias === token)
+        || list.find((x) => x.prefix === token)
+        || null;
+    }
+
+    // 명령을 클릭했을 때: 사용자에게는 별칭을 쓰게 한다.
+    // 인자가 필요하면 입력창에 채워두고, 아니면 바로 실행한다.
+    function runOrFill(token) {
+      const c = findCmd(token);
+      const typed = (c && c.alias) ? c.alias : token; // 콘솔엔 별칭으로
+      if (c && c.allow_args) {
+        input.value = typed + " ";
+        input.focus();
+      } else {
+        runCommand(typed);
+      }
+    }
+
+    // token 은 별칭 우선. 큰 글씨=별칭, 작은 글씨=설명 + 실제 명령.
+    function makeCmdButton(token, desc) {
+      const c = findCmd(token);
+      const alias = (c && c.alias) ? c.alias : token;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "exec-help-cmd";
+      const code = document.createElement("code");
+      code.textContent = alias;
+      b.appendChild(code);
+      if (desc) {
+        const s = document.createElement("small");
+        s.textContent = desc;
+        b.appendChild(s);
+      }
+      if (c && c.prefix && c.prefix !== alias) {
+        const real = document.createElement("small");
+        real.className = "exec-help-real";
+        real.textContent = "실행 → " + c.prefix;
+        b.appendChild(real);
+      }
+      b.addEventListener("click", () => runOrFill(token));
+      return b;
+    }
+
+    function fmtElapsed(sec) {
+      const n = Number(sec);
+      if (!isFinite(n) || n <= 0) return "";
+      const m = Math.floor(n / 60), s = Math.floor(n % 60);
+      return m > 0 ? m + "분 " + s + "초" : s + "초";
+    }
+
+    // ── 순차 진행 단계 정의 ──────────────────────────────
+    // 각 단계는 done(state) 가 true 가 되면 완료로 보고 다음 단계로 넘어간다.
+    // 신호가 없는 단계(AP 띄우기 등)는 사용자가 그 명령을 실제로 실행했는지로 판단한다.
+    const STEPS = [
+      {
+        key: "ap", stage: "setup", name: "피해 AP",
+        title: "① 실습용 피해 AP 띄우기",
+        desc: "공격 대상이 될 정상 AP를 실습 환경에 먼저 띄웁니다. 이게 있어야 가짜 AP가 흉내 낼 대상이 생깁니다.",
+        actions: [{ cmd: "ap", desc: "피해 AP 생성 (백그라운드)" }],
+        status: () => "아직 시작 전입니다. 피해 AP부터 띄워 보세요.",
+        done: (s) => s.ranAp || s.attackEver || s.detectRan || s.hasFindings
+      },
+      {
+        key: "attack", stage: "attack", name: "공격 실행",
+        title: "② 가짜 AP로 공격 실행",
+        desc: "주변 AP를 스캔해 대상을 고른 뒤, 가짜 AP(Evil Twin)를 띄워 공격을 시작합니다. 공격이 실제로 돌기 시작하면 자동으로 다음 단계로 넘어갑니다.",
+        actions: [
+          { cmd: "scan", desc: "① 대상 AP 스캔 → et_config.conf 저장" },
+          { cmd: "attack", desc: "② 가짜 AP + deauth + 스니퍼 실행" }
+        ],
+        status: () => "피해 AP 준비 완료. 이제 대상을 스캔하고 가짜 AP를 띄워 공격하세요.",
+        done: (s) => s.attackEver || s.ranAttack || s.detectRan || s.hasFindings
+      },
+      {
+        key: "detect", stage: "detect", name: "탐지",
+        title: "③ Evil Twin 탐지",
+        desc: "공격이 도는 동안 수집된 pcap을 분석해 가짜 AP를 탐지합니다. 탐지를 한 번 실행하면 다음 단계로 넘어갑니다.",
+        actions: [
+          { cmd: "detect", desc: "pcap 경로를 붙여 실행 (예: detect capture.pcap --json /tmp/et_logs/detect.json)" }
+        ],
+        status: (s) => s.attackRunning
+          ? ("공격 진행 중" + (s.essid ? " (대상 " + s.essid + (s.elapsedText ? ", 경과 " + s.elapsedText : "") + ")" : "") + ". 이제 탐지를 실행하세요.")
+          : "공격 기록이 있습니다. 수집된 pcap으로 탐지를 실행하세요.",
+        done: (s) => s.detectRan || s.ranDetect || s.hasFindings
+      },
+      {
+        key: "defense", stage: "defense", name: "방어",
+        title: "④ 방어 조치",
+        desc: "탐지된 위조 BSSID를 차단하고, 정상 AP의 BSSID·채널을 확인해 클라이언트를 보호합니다. PMF(802.11w) 적용도 검토하세요.",
+        actions: [{ cmd: "config", desc: "정상 AP 설정 확인" }],
+        status: (s) => s.hasFindings
+          ? ("Evil Twin " + s.findingCount + "건 탐지됨" + (s.creds ? ", 자격증명 탈취 정황도 있습니다." : ".") + " 방어 조치로 마무리하세요.")
+          : "탐지를 마쳤습니다. 위조 AP 차단 등 방어 조치로 마무리하세요.",
+        note: "방어 절차 자세히 → docs/evil-twin-defense.md",
+        done: () => false
+      }
+    ];
+
+    function readState() {
+      const d = window.__wfsatLive || null;
+      const summary = (d && d.summary) || null;
+      const det = (d && d.detections) || {};
+      const findings = Array.isArray(det.findings) ? det.findings : [];
+      const apTable = Array.isArray(det.ap_table) ? det.ap_table : [];
+      const events = Array.isArray(d && d.events) ? d.events : [];
+      const attackEvent = events.some((e) => e && (
+        e.type === "attack_start" || e.type === "client_connected" || e.type === "credential_captured"));
+      return {
+        liveKnown: !!d,
+        attackRunning: !!(summary && summary.status === "running"),
+        attackEver: !!summary || attackEvent,
+        detectRan: apTable.length > 0,
+        hasFindings: findings.length > 0,
+        findingCount: findings.length,
+        creds: (summary && Number(summary.credentials_captured) > 0)
+          || events.some((e) => e && e.type === "credential_captured"),
+        essid: (summary && summary.essid) || (findings[0] && findings[0].ssid) || "",
+        elapsedText: summary ? fmtElapsed(summary.elapsed_seconds) : "",
+        ranAp: ranSteps.has("bash lab_victim_ap.sh"),
+        ranAttack: ranSteps.has("bash et_sniffing_attack.sh"),
+        ranDetect: ranSteps.has("python3 detector/et_detector.py")
+      };
+    }
+
+    // 완료되지 않은 첫 단계 = 현재 단계
+    function currentStepIndex(state) {
+      for (let i = 0; i < STEPS.length; i++) {
+        if (!STEPS[i].done(state)) return i;
+      }
+      return STEPS.length - 1;
+    }
+
+    // 진행 표시용 점(dots) — 현재 단계까지의 위치만 알려주고 명령은 감춘다
+    function makeStepper(idx, state) {
+      const bar = document.createElement("div");
+      bar.className = "exec-steps";
+      STEPS.forEach((st, i) => {
+        const dot = document.createElement("span");
+        const doneMark = st.done(state);
+        dot.className = "exec-step-dot"
+          + (i === idx ? " is-current" : "")
+          + (doneMark ? " is-done" : "");
+        dot.textContent = (i + 1) + ". " + st.name;
+        bar.appendChild(dot);
+      });
+      return bar;
+    }
+
+    function printHelp() {
+      clearEmpty();
+      const state = readState();
+      const idx = currentStepIndex(state);
+      const step = STEPS[idx];
+
+      const wrap = document.createElement("div");
+      wrap.className = "exec-entry is-help";
+
+      const cmdEl = document.createElement("code");
+      cmdEl.className = "exec-cmd";
+      cmdEl.textContent = "help";
+      wrap.appendChild(cmdEl);
+
+      // 진행 위치
+      wrap.appendChild(makeStepper(idx, state));
+
+      // 현재 단계만 표시
+      const now = document.createElement("div");
+      now.className = "exec-help-now stage-" + step.stage;
+
+      const title = document.createElement("p");
+      title.className = "exec-help-now-title";
+      title.textContent = "단계 " + (idx + 1) + "/" + STEPS.length + " · " + step.title;
+      now.appendChild(title);
+
+      if (!state.liveKnown) {
+        const warn = document.createElement("p");
+        warn.className = "exec-help-note";
+        warn.textContent = "※ 실습 데이터를 아직 못 불러왔습니다. 실습 모드에서 잠시 후 다시 help 를 입력하면 진행 상황이 반영됩니다.";
+        now.appendChild(warn);
+      }
+
+      const statusP = document.createElement("p");
+      statusP.className = "exec-help-status";
+      statusP.textContent = "지금: " + (typeof step.status === "function" ? step.status(state) : step.status);
+      now.appendChild(statusP);
+
+      const descP = document.createElement("p");
+      descP.className = "exec-help-next";
+      descP.textContent = step.desc;
+      now.appendChild(descP);
+
+      if (step.actions && step.actions.length) {
+        const row = document.createElement("div");
+        row.className = "exec-help-actions";
+        step.actions.forEach((a) => row.appendChild(makeCmdButton(a.cmd, a.desc)));
+        now.appendChild(row);
+      }
+      if (step.note) {
+        const noteP = document.createElement("p");
+        noteP.className = "exec-help-note";
+        noteP.textContent = step.note;
+        now.appendChild(noteP);
+      }
+
+      const hint = document.createElement("p");
+      hint.className = "exec-help-hint";
+      hint.textContent = idx < STEPS.length - 1
+        ? "이 단계를 마치면 다음에 help 를 입력할 때 다음 단계를 안내합니다. (처음부터: reset)"
+        : "마지막 단계입니다. 처음부터 다시 하려면 reset 을 입력하세요.";
+      now.appendChild(hint);
+
+      wrap.appendChild(now);
+      logEl.appendChild(wrap);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function resetProgress() {
+      ranSteps.clear();
+      try { localStorage.removeItem(RAN_KEY); } catch (e) {}
+      clearEmpty();
+      const p = document.createElement("p");
+      p.className = "exec-log-empty";
+      p.textContent = "진행 상황을 처음으로 되돌렸습니다. help 를 입력해 1단계부터 시작하세요.";
+      logEl.appendChild(p);
+    }
+
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const cmd = input.value.trim();
       if (!cmd || running) return;
+      const low = cmd.toLowerCase();
+      if (HELP_WORDS.has(low)) {
+        input.value = "";
+        printHelp();
+        input.focus();
+        return;
+      }
+      if (low === "reset" || low === "처음" || low === "초기화") {
+        input.value = "";
+        resetProgress();
+        input.focus();
+        return;
+      }
       input.value = "";
       runCommand(cmd);
     });
@@ -1439,26 +1715,26 @@
       setBadge("ok", "연결됨");
       input.disabled = false;
       sendBtn.disabled = false;
+      commandInfo = info;
+      input.placeholder = "예: scan   ( help 입력 )";
+      renderHint();
+    }
+
+    // 명령어 목록을 늘어놓는 대신 help 안내만 남긴다.
+    function renderHint() {
+      if (!chips) return;
       chips.innerHTML = "";
-      (info.commands || []).forEach((c) => {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "exec-chip";
-        chip.textContent = c.label;
-        chip.title = (c.prefix || "") + (c.desc ? " — " + c.desc : "");
-        if (c.background) chip.dataset.bg = "1";
-        chip.addEventListener("click", () => {
-          if (c.allow_args) {
-            // 인자가 필요한 명령은 입력창에 채워두고 사용자가 마무리
-            input.value = c.prefix + " ";
-            input.focus();
-          } else {
-            // 인자 없는 조회성 명령은 바로 실행
-            runCommand(c.prefix);
-          }
-        });
-        chips.appendChild(chip);
-      });
+      const helpBtn = document.createElement("button");
+      helpBtn.type = "button";
+      helpBtn.className = "exec-chip exec-chip-help";
+      helpBtn.textContent = "help";
+      helpBtn.title = "단계별 명령어와 현재 상황에 맞는 다음 할 일 보기";
+      helpBtn.addEventListener("click", () => printHelp());
+      chips.appendChild(helpBtn);
+      const hint = document.createElement("span");
+      hint.className = "exec-hint";
+      hint.textContent = "help 를 입력하면 단계별 명령어와 다음 할 일을 알려줍니다.";
+      chips.appendChild(hint);
     }
 
     loadCommands();

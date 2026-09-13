@@ -83,24 +83,56 @@ def _is_root():
 #                실행 시 자동으로 SUDO_CMD(기본 "sudo -n")를 앞에 붙인다.
 #                → 대시보드에서 "sudo" 를 직접 칠 필요가 없다.
 # 사용자가 명령 앞에 "sudo " 를 붙여도 허용되며, 중복 없이 처리된다.
+#   group      : 콘솔의 help 목록에서 공격 단계별로 묶어 보여주기 위한 분류.
+#   alias      : 콘솔에서 사용자가 읽고/입력하는 짧은 이름. 서버가 실행 전에
+#                이 별칭을 prefix(실제 명령)로 바꿔 준다. 실제 명령을 그대로
+#                입력해도 동작한다(하위 호환).
 ALLOWED_COMMANDS = [
-    {"label": "의존성 점검", "prefix": "bash et_check_deps.sh",
+    {"label": "의존성 점검", "alias": "deps", "prefix": "bash et_check_deps.sh", "group": "준비",
      "allow_args": True, "root": True, "desc": "필요 도구 점검/설치 (--check-only 로 점검만)"},
-    {"label": "AP 스캔", "prefix": "bash et_scan.sh",
-     "allow_args": True, "root": True, "desc": "주변 AP 스캔"},
-    {"label": "Evil Twin 탐지", "prefix": "python3 detector/et_detector.py",
-     "allow_args": True, "root": True, "desc": "pcap 분석으로 Evil Twin 탐지 (인자로 pcap 경로)"},
-    {"label": "피해 AP 실행", "prefix": "bash lab_victim_ap.sh",
+    {"label": "AP 스캔", "alias": "scan", "prefix": "bash et_scan.sh", "group": "준비",
+     "allow_args": True, "root": True, "desc": "주변 AP 스캔 → et_config.conf 저장"},
+    {"label": "피해 AP 실행", "alias": "ap", "prefix": "bash lab_victim_ap.sh", "group": "공격",
      "allow_args": True, "background": True, "root": True, "desc": "실습용 피해 AP 생성 (백그라운드)"},
-    {"label": "스니핑 공격 실행", "prefix": "bash et_sniffing_attack.sh",
+    {"label": "스니핑 공격 실행", "alias": "attack", "prefix": "bash et_sniffing_attack.sh", "group": "공격",
      "allow_args": True, "background": True, "root": True, "desc": "가짜 AP+deauth+스니퍼 (백그라운드)"},
-    {"label": "무선 인터페이스", "prefix": "iw dev",
+    {"label": "Evil Twin 탐지", "alias": "detect", "prefix": "python3 detector/et_detector.py", "group": "탐지",
+     "allow_args": True, "root": True, "desc": "pcap 분석으로 Evil Twin 탐지 (인자로 pcap 경로)"},
+    {"label": "무선 인터페이스", "alias": "iface", "prefix": "iw dev", "group": "조회",
      "desc": "무선 인터페이스 목록"},
-    {"label": "인터페이스 상태", "prefix": "iwconfig",
+    {"label": "인터페이스 상태", "alias": "wifi", "prefix": "iwconfig", "group": "조회",
      "desc": "무선 어댑터 상태"},
-    {"label": "현재 설정", "prefix": "cat et_config.conf",
+    {"label": "현재 설정", "alias": "config", "prefix": "cat et_config.conf", "group": "조회",
      "desc": "et_config.conf 값 출력"},
 ]
+
+# 별칭 → 실제 명령 문자열. (예: "scan" → "bash et_scan.sh")
+ALIAS_MAP = {e["alias"]: e["prefix"] for e in ALLOWED_COMMANDS if e.get("alias")}
+
+
+def _resolve_alias(cmd):
+    """맨 앞 토큰이 별칭이면 실제 명령으로 바꾼다. 뒤의 인자와 sudo 접두사는 보존.
+    별칭이 아니거나 이미 실제 명령이면 그대로 돌려준다(하위 호환)."""
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError:
+        return cmd
+    if not tokens:
+        return cmd
+    # 앞에 붙은 "sudo [옵션]" 은 그대로 두고 그 다음 토큰을 별칭 후보로 본다.
+    i = 0
+    head = []
+    while i < len(tokens) and tokens[i] == "sudo":
+        head.append(tokens[i]); i += 1
+        while i < len(tokens) and tokens[i].startswith("-"):
+            head.append(tokens[i]); i += 1
+    if i >= len(tokens):
+        return cmd
+    alias = tokens[i]
+    if alias not in ALIAS_MAP:
+        return cmd
+    rest = tokens[i + 1:]
+    return " ".join(head + [ALIAS_MAP[alias]] + rest)
 
 # shell=False 로 실행하므로 아래 문자들은 어차피 특별한 의미가 없지만,
 # 방어적으로(그리고 화이트리스트 우회 시도 차단을 위해) 명령 문자열에서 거부한다.
@@ -188,6 +220,7 @@ def run_command(cmd):
     cmd = (cmd or "").strip()
     if not cmd:
         return {"ok": False, "command": cmd, "error": "빈 명령입니다."}
+    cmd = _resolve_alias(cmd)  # 별칭(scan/attack/…)을 실제 명령으로 변환
     for ch in _FORBIDDEN_CHARS:
         if ch in cmd:
             return {"ok": False, "command": cmd,
@@ -224,7 +257,9 @@ def exec_commands_info():
         "timeout": EXEC_TIMEOUT,
         "commands": [
             {"label": e["label"], "prefix": e["prefix"],
+             "alias": e.get("alias", ""),
              "desc": e.get("desc", ""),
+             "group": e.get("group", "기타"),
              "allow_args": bool(e.get("allow_args")),
              "background": bool(e.get("background"))}
             for e in ALLOWED_COMMANDS
