@@ -49,32 +49,28 @@ if [ -n "${_cli_interface}" ]; then
 	_iface_from_runtime=1
 fi
 
+# 인터페이스 자동 배정(대화형 입력 없음):
+#   env(interface=) > et_config.conf 값 > 무선 어댑터 "순서" 자동.
+#   Evil Twin 공격은 victim AP(1번째 어댑터)와 동시에 떠야 하므로,
+#   공격은 2번째 무선 어댑터(예: wlan1)를 사용한다.
 if [ -z "${interface}" ]; then
-	echo "[*] Available WiFi interfaces:"
-	declare -a _wifaces
-	_wj=0
-	for _witer in /sys/class/net/*/; do
+	declare -a _wifaces=()
+	for _witer in /sys/class/net/*/; do          # glob 결과는 이름순 정렬됨
 		_wnm=$(basename "${_witer}")
-		if [ -d "/sys/class/net/${_wnm}/wireless" ]; then
-			_wj=$((_wj + 1))
-			_wifaces[$_wj]="${_wnm}"
-			printf "    %d) %s\n" "${_wj}" "${_wnm}"
-		fi
+		[ -d "/sys/class/net/${_wnm}/wireless" ] && _wifaces+=("${_wnm}")
 	done
-	if [ "${_wj}" -eq 0 ]; then
+	echo "[*] Wireless adapters (in order): ${_wifaces[*]:-(none)}"
+	if [ "${#_wifaces[@]}" -eq 0 ]; then
 		echo "[!] No WiFi interfaces found." >&2
 		exit 1
-	elif [ "${_wj}" -eq 1 ]; then
-		interface="${_wifaces[1]}"
-		echo "[*] Only one interface found, using: ${interface}"
+	elif [ "${#_wifaces[@]}" -eq 1 ]; then
+		echo "[!] 무선 어댑터가 1개뿐입니다: ${_wifaces[0]}" >&2
+		echo "    Evil Twin 공격은 victim AP(1번째)와 공격(2번째)에 각각 별도 어댑터가 필요합니다." >&2
+		echo "    두 번째 무선 어댑터를 연결한 뒤 다시 실행하거나, interface=<iface> 로 직접 지정하세요." >&2
+		exit 1
 	else
-		printf "[?] Select interface number (1-%d): " "${_wj}"
-		read -r _wsel
-		while [[ ! "${_wsel}" =~ ^[0-9]+$ ]] || [ "${_wsel}" -lt 1 ] || [ "${_wsel}" -gt "${_wj}" ]; do
-			printf "[!] Invalid. Select (1-%d): " "${_wj}"
-			read -r _wsel
-		done
-		interface="${_wifaces[${_wsel}]}"
+		interface="${_wifaces[1]}"               # 2번째 어댑터
+		echo "[*] 공격 인터페이스 자동 선택(2번째 어댑터): ${interface}"
 	fi
 	_iface_from_runtime=1
 fi

@@ -83,43 +83,27 @@ trap '_scan_cleanup' EXIT
 # WiFi 어댑터 선택
 # ============================================================
 if [ -z "${interface}" ]; then
-    echo "[*] 사용 가능한 WiFi 인터페이스 목록:"
-    echo
-
-    # /sys/class/net 에서 wireless 디렉토리가 있는 인터페이스만 추출
-    declare -a _ifaces
-    j=0
-    for _iface in /sys/class/net/*/; do
+    # 인터페이스 자동 배정(대화형 입력 없음): 무선 어댑터 "순서"로 고른다.
+    # 공격과 동일하게 기본은 2번째 어댑터(예: wlan1)를 쓰되, 어댑터가 하나뿐이면
+    # 그 하나를 쓴다(스캔은 victim AP 없이도 단독 실행 가능하므로).
+    declare -a _ifaces=()
+    for _iface in /sys/class/net/*/; do          # glob 결과는 이름순 정렬됨
         _name=$(basename "${_iface}")
-        if [ -d "/sys/class/net/${_name}/wireless" ]; then
-            j=$((j + 1))
-            _ifaces[$j]="${_name}"
-            printf "    %d) %s\n" "${j}" "${_name}"
-        fi
+        [ -d "/sys/class/net/${_name}/wireless" ] && _ifaces+=("${_name}")
     done
 
-    if [ "${j}" -eq 0 ]; then
+    echo "[*] 감지된 무선 어댑터(순서대로): ${_ifaces[*]:-(없음)}"
+    if [ "${#_ifaces[@]}" -eq 0 ]; then
         echo "[!] WiFi 인터페이스를 찾을 수 없습니다." >&2
         exit 1
-    fi
-
-    echo
-    if [ "${j}" -eq 1 ]; then
-        echo "[*] 인터페이스가 하나뿐이라 자동 선택합니다: ${_ifaces[1]}"
-        interface="${_ifaces[1]}"
+    elif [ "${#_ifaces[@]}" -eq 1 ]; then
+        interface="${_ifaces[0]}"
+        echo "[*] 무선 어댑터가 하나뿐이라 자동 선택: ${interface}"
     else
-        printf "[?] 인터페이스 번호 선택 (1-%d): " "${j}"
-        read -r _sel_iface
-        while [[ ! "${_sel_iface}" =~ ^[0-9]+$ ]] || \
-              [ "${_sel_iface}" -lt 1 ] || [ "${_sel_iface}" -gt "${j}" ]; do
-            echo "[!] 잘못된 입력입니다. 1~${j} 사이의 숫자를 입력하세요."
-            printf "[?] 인터페이스 번호 선택 (1-%d): " "${j}"
-            read -r _sel_iface
-        done
-        interface="${_ifaces[${_sel_iface}]}"
+        interface="${_ifaces[1]}"                 # 2번째 어댑터
+        echo "[*] 스캔 인터페이스 자동 선택(2번째 어댑터): ${interface}"
     fi
 
-    echo "[*] 선택된 인터페이스: ${interface}"
     # 선택한 인터페이스를 et_config.conf에 저장
     update_config_value "interface" "${interface}"
     echo "[+] et_config.conf에 interface 저장 완료."
