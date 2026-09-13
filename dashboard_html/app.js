@@ -1321,6 +1321,7 @@
   (function () {
     const EXEC_ENDPOINT = "/api/exec";
     const COMMANDS_ENDPOINT = "/api/exec/commands";
+    const LOG_ENDPOINT = "/api/exec/log";
     const badge = $("execStatusBadge");
     const chips = $("execChips");
     const logEl = $("execLog");
@@ -1410,13 +1411,62 @@
       if (err) addOut(entry, meta, err, true);
       if (!out && !err) addOut(entry, meta, ok ? "(출력 없음)" : "(실패)", !ok);
       let label;
-      if (result.terminal) label = "새 터미널 창에서 실행 (PID " + result.pid + ")";
-      else if (result.background) label = "백그라운드 실행 (PID " + result.pid + ")";
+      if (result.background) label = "백그라운드 실행 (PID " + result.pid + ")";
       else if (result.timeout) label = "시간 초과";
       else if (result.returncode !== null && result.returncode !== undefined) label = "종료 코드 " + result.returncode;
       else label = ok ? "완료" : "실패";
       meta.textContent = label;
       logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // 백그라운드 job 의 로그를 폴링해 해당 항목에 실시간으로 이어붙인다.
+    function streamJob(ref, data) {
+      const entry = ref.entry, meta = ref.meta;
+      entry.classList.remove("is-pending");
+      const intro = (data.stdout || "").replace(/\s+$/, "");
+      if (intro) addOut(entry, meta, intro, false);
+      const pre = document.createElement("pre");
+      pre.className = "exec-out exec-stream";
+      entry.insertBefore(pre, meta);
+      entry.classList.add("is-running");
+      meta.textContent = "실행 중… (실시간 로그)";
+
+      let offset = 0;
+      let stopped = false;
+      async function tick() {
+        if (stopped) return;
+        let d;
+        try {
+          const res = await fetch(
+            LOG_ENDPOINT + "?job=" + encodeURIComponent(data.job) + "&offset=" + offset,
+            { cache: "no-store" });
+          d = await res.json();
+        } catch (e) {
+          meta.textContent = "로그 연결 끊김";
+          entry.classList.remove("is-running");
+          return;
+        }
+        if (d && d.ok) {
+          if (d.text) {
+            pre.textContent += d.text;
+            logEl.scrollTop = logEl.scrollHeight;
+          }
+          if (typeof d.offset === "number") offset = d.offset;
+          if (!d.running) {
+            stopped = true;
+            entry.classList.remove("is-running");
+            const rc = d.returncode;
+            const ok = (rc === 0 || rc === null || rc === undefined);
+            entry.classList.add(ok ? "is-ok" : "is-fail");
+            meta.textContent = (rc === null || rc === undefined)
+              ? "종료됨" : ("종료 코드 " + rc);
+            if (!pre.textContent) pre.textContent = "(출력 없음)";
+            return;
+          }
+        }
+        window.setTimeout(tick, 1000);
+      }
+      tick();
     }
 
     async function runCommand(cmd) {
@@ -1437,7 +1487,11 @@
         } catch (e) {
           data = { ok: false, error: "서버 응답을 해석할 수 없습니다 (" + res.status + ")" };
         }
-        fillEntry(ref, data);
+        if (data && data.ok && data.job) {
+          streamJob(ref, data);   // 백그라운드 실행 → 로그를 대시보드에 실시간 표시
+        } else {
+          fillEntry(ref, data);
+        }
         if (data && data.ok) markRan(cmd); // 성공한 단계 명령을 진행 상황에 반영
       } catch (err) {
         fillEntry(ref, { ok: false, error: "브리지 서버에 연결할 수 없습니다." });
@@ -1488,7 +1542,7 @@
       if (c && c.prefix && c.prefix !== alias) {
         const real = document.createElement("small");
         real.className = "exec-help-real";
-        real.textContent = "실행 → " + c.prefix + (c.terminal ? "  · 새 터미널 창" : "");
+        real.textContent = "실행 → " + c.prefix;
         b.appendChild(real);
       }
       b.addEventListener("click", () => runOrFill(token));
@@ -1509,20 +1563,19 @@
       {
         key: "ap", stage: "setup", name: "피해 AP",
         title: "① 실습용 피해 AP 띄우기",
-        desc: "공격 대상이 될 정상 AP를 실습 환경에 먼저 띄웁니다. 이게 있어야 가짜 AP가 흉내 낼 대상이 생깁니다.",
-        actions: [{ cmd: "ap", desc: "피해 AP 생성 (백그라운드)" }],
+        desc: "공격 대상이 될 정상 AP를 실습 환경에 먼저 띄웁니다. 이때 그 AP 정보(BSSID·ESSID·채널)가 공격 대상으로 자동 등록되므로, 따로 스캔할 필요가 없습니다.",
+        actions: [{ cmd: "ap", desc: "피해 AP 생성 + 대상 자동 등록" }],
         status: () => "아직 시작 전입니다. 피해 AP부터 띄워 보세요.",
         done: (s) => s.ranAp || s.attackEver || s.detectRan || s.hasFindings
       },
       {
         key: "attack", stage: "attack", name: "공격 실행",
         title: "② 가짜 AP로 공격 실행",
-        desc: "주변 AP를 스캔해 대상을 고른 뒤, 가짜 AP(Evil Twin)를 띄워 공격을 시작합니다. 공격이 실제로 돌기 시작하면 자동으로 다음 단계로 넘어갑니다.",
+        desc: "피해 AP를 띄우면 그 AP가 공격 대상으로 이미 등록되어 있습니다. 바로 가짜 AP(Evil Twin)를 띄워 공격을 시작하세요. 공격이 돌기 시작하면 자동으로 다음 단계로 넘어갑니다.",
         actions: [
-          { cmd: "scan", desc: "① 대상 AP 스캔 → et_config.conf 저장" },
-          { cmd: "attack", desc: "② 가짜 AP + deauth + 스니퍼 실행" }
+          { cmd: "attack", desc: "가짜 AP + deauth + 스니퍼 실행" }
         ],
-        status: () => "피해 AP 준비 완료. 이제 대상을 스캔하고 가짜 AP를 띄워 공격하세요.",
+        status: () => "피해 AP 준비 완료(대상 자동 등록). 이제 공격을 시작하세요.",
         done: (s) => s.attackEver || s.ranAttack || s.detectRan || s.hasFindings
       },
       {

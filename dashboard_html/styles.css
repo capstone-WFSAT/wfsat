@@ -2263,9 +2263,23 @@ footer button {
   color: var(--text);
 }
 .exec-out.err { color: var(--red, #ff6b6b); }
+.exec-out.exec-stream {
+  max-height: 260px;
+  overflow-y: auto;
+  border-left: 2px solid var(--cyan);
+  padding-left: 8px;
+}
 .exec-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
 .exec-entry.is-ok .exec-meta { color: var(--green, #57d38c); }
 .exec-entry.is-fail .exec-meta { color: var(--red, #ff6b6b); }
+.exec-entry.is-running .exec-meta {
+  color: var(--cyan);
+}
+.exec-entry.is-running .exec-meta::before {
+  content: "● ";
+  animation: exec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes exec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 .exec-form {
   display: flex;
   gap: 6px;
