@@ -35,6 +35,8 @@ LAB_COUNTRY="${LAB_COUNTRY:-}"           # 국가코드(예: KR, US). 비우면 
 LAB_WRITE_CONFIG="${LAB_WRITE_CONFIG:-1}" # 1=et_config.conf에 대상(bssid/essid/channel) 자동 기록 -> et_scan 불필요
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# et_config.conf 는 스크립트와 같은 폴더 또는 상위(프로젝트 루트)에 있다.
+[ -f "${_script_dir}/et_config.conf" ] || _script_dir="${_script_dir}/.."
 _config_file="${_script_dir}/et_config.conf"
 _workdir="/tmp/lab_victim_ap"
 _hostapd_conf="${_workdir}/hostapd.conf"

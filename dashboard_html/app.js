@@ -1345,9 +1345,9 @@
     // 단계별 진행 추적: 사용자가 실제로 실행한 단계 명령을 기억(신호가 없는 단계용).
     const RAN_KEY = "wfsat.ranSteps";
     const STEP_KEYS = [
-      "bash lab_victim_ap.sh", "bash et_scan.sh",
-      "bash et_sniffing_attack.sh", "python3 detector/et_detector.py",
-      "bash et_beacon_flood.sh", "bash et_capture.sh"
+      "bash evil_twin/lab_victim_ap.sh", "bash evil_twin/et_scan.sh",
+      "bash evil_twin/et_sniffing_attack.sh", "python3 detector/et_detector.py",
+      "bash beacon_flood/et_beacon_flood.sh", "bash beacon_flood/et_capture.sh"
     ];
     let ranSteps = new Set();
     try {
@@ -1696,11 +1696,11 @@
           || events.some((e) => e && e.type === "credential_captured"),
         essid: (summary && summary.essid) || (findings[0] && findings[0].ssid) || "",
         elapsedText: summary ? fmtElapsed(summary.elapsed_seconds) : "",
-        ranAp: ranSteps.has("bash lab_victim_ap.sh"),
-        ranAttack: ranSteps.has("bash et_sniffing_attack.sh"),
+        ranAp: ranSteps.has("bash evil_twin/lab_victim_ap.sh"),
+        ranAttack: ranSteps.has("bash evil_twin/et_sniffing_attack.sh"),
         ranDetect: ranSteps.has("python3 detector/et_detector.py"),
-        ranBeacon: ranSteps.has("bash et_beacon_flood.sh"),
-        ranCapture: ranSteps.has("bash et_capture.sh")
+        ranBeacon: ranSteps.has("bash beacon_flood/et_beacon_flood.sh"),
+        ranCapture: ranSteps.has("bash beacon_flood/et_capture.sh")
       };
     }
 

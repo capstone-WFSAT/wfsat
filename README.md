@@ -45,29 +45,33 @@ bash et_check_deps.sh --check-only  # 설치 없이 점검만 (root 불필요)
 
 ### 브리지 실행
 ```bash
-sudo python3 bridge.py     # 0.0.0.0:5000, dashboard_html/ 도 함께 서빙
+# 프로젝트 루트에서 실행 (명령 경로가 루트 기준이라 위치가 중요)
+sudo python3 dashboard_html/bridge.py     # 0.0.0.0:5000, dashboard_html/ 도 함께 서빙
 ```
 - 공격이 `log_dir`(기본 `/tmp/et_logs`)에 남긴 로그를 직접 읽으므로 **공격과 같은 Kali에서 실행**한다.
 - 접속: `http://<Kali IP>:5000/` → 우측 상단 **"실습"** 토글.
+- 브리지는 스스로 프로젝트 루트를 찾아 명령을 그 위치에서 실행한다(어디서 띄우든 동작).
 
 ### 명령 콘솔 (실습 탭 오른쪽)
 실습 탭 오른쪽에 **명령 콘솔**이 붙어 있다(스크롤해도 고정). 여기 입력한 명령은 **브리지가 도는 Kali에서 실행**되고, 결과/진행 로그가 콘솔에 **실시간으로** 표시된다.
 
 - **짧은 별칭**으로 입력한다. 서버가 실제 명령으로 변환해 실행한다:
 
-  | 별칭 | 실제 실행 | 단계 | 설명 |
+  | 별칭 | 실제 실행 (프로젝트 루트 기준) | 단계 | 설명 |
   |------|-----------|------|------|
   | `deps` | `bash et_check_deps.sh` | 준비 | 의존성 점검/설치 |
-  | `scan` | `bash et_scan.sh` | 준비 | 주변 AP 스캔 → config 저장 (실제 대상용) |
-  | `ap` | `bash lab_victim_ap.sh` | 공격 | 실습용 피해 AP 생성 + 대상 자동 등록 |
-  | `attack` | `bash et_sniffing_attack.sh` | 공격 | Evil Twin(가짜 AP+deauth+스니퍼) |
-  | `beacon` | `bash et_beacon_flood.sh` | 공격 | Beacon Flood(가짜 SSID 대량 송출) |
-  | `capture` | `bash et_capture.sh` | 탐지 | 관리 프레임 pcap 캡처 |
+  | `scan` | `bash evil_twin/et_scan.sh` | 준비 | 주변 AP 스캔 → config 저장 (실제 대상용) |
+  | `ap` | `bash evil_twin/lab_victim_ap.sh` | 공격 | 실습용 피해 AP 생성 + 대상 자동 등록 |
+  | `attack` | `bash evil_twin/et_sniffing_attack.sh` | 공격 | Evil Twin(가짜 AP+deauth+스니퍼) |
+  | `beacon` | `bash beacon_flood/et_beacon_flood.sh` | 공격 | Beacon Flood(가짜 SSID 대량 송출) |
+  | `capture` | `bash beacon_flood/et_capture.sh` | 탐지 | 관리 프레임 pcap 캡처 |
   | `detect` | `python3 detector/et_detector.py` | 탐지 | pcap 분석 → Evil Twin·Beacon Flood 탐지 |
-  | `stop` | `bash et_stop.sh` | 조회 | 실행 중인 공격 중지 (`stop all`=피해 AP까지) |
+  | `stop` | `bash dashboard_html/et_stop.sh` | 조회 | 실행 중인 공격 중지 (`stop all`=피해 AP까지) |
   | `iface` | `iw dev` | 조회 | 무선 인터페이스 목록 |
   | `wifi` | `iwconfig` | 조회 | 무선 어댑터 상태 |
   | `config` | `cat et_config.conf` | 조회 | 설정값 출력 |
+
+  > 콘솔에서는 별칭(`scan`·`attack`…)만 입력하면 되고, 서버가 위 경로로 변환해 실행한다. 아래 표는 파일이 실제로 어디 있는지 참고용.
 
 - **`help`** 를 입력하면 현재 상황에 맞는 **다음 단계**와 명령을 안내한다(순차 가이드). `reset` 으로 진행 초기화.
 - **root 자동 처리**: root가 필요한 명령은 서버가 자동으로 `sudo -n`을 붙인다(브리지를 root로 실행 중이면 그대로). → 콘솔에서 `sudo`를 칠 필요 없음. (NOPASSWD sudoers 또는 root로 브리지 실행 필요 — [docs/security.md](docs/security.md) 참고)
@@ -110,13 +114,13 @@ detect /tmp/et_logs/capture_*.pcap --json /tmp/et_logs/detect.json   # ④ 탐�
 stop                    # ⑤ 공격 중지 (인터페이스/방화벽 자동 복구)
 ```
 
-**CLI로 직접**
+**CLI로 직접** (프로젝트 루트에서)
 ```bash
-sudo LAB_OPEN=1 bash lab_victim_ap.sh        # 피해 AP(개방형) — 대상 자동 등록
-sudo bash et_sniffing_attack.sh              # 공격 (인터페이스 자동, 또는 interface= 로 지정)
-sudo bash et_capture.sh                      # 캡처
+sudo LAB_OPEN=1 bash evil_twin/lab_victim_ap.sh   # 피해 AP(개방형) — 대상 자동 등록
+sudo bash evil_twin/et_sniffing_attack.sh         # 공격 (인터페이스 자동, 또는 interface= 로 지정)
+sudo bash beacon_flood/et_capture.sh              # 캡처
 python3 detector/et_detector.py <pcap> --json /tmp/et_logs/detect.json
-sudo bash et_stop.sh
+sudo bash dashboard_html/et_stop.sh
 ```
 
 **핵심 포인트**
@@ -136,11 +140,11 @@ detect /tmp/et_logs/capture_*.pcap --json /tmp/et_logs/detect.json   # ③ 탐�
 stop                    # ④ 중지
 ```
 
-**CLI로 직접 / 파라미터**
+**CLI로 직접 / 파라미터** (프로젝트 루트에서)
 ```bash
-sudo bash et_beacon_flood.sh
+sudo bash beacon_flood/et_beacon_flood.sh
 # 옵션(env):
-sudo BF_BASE="Cafe_" BF_COUNT=50 BF_PPS=1000 BF_CHANNEL=6 bash et_beacon_flood.sh
+sudo BF_BASE="Cafe_" BF_COUNT=50 BF_PPS=1000 BF_CHANNEL=6 bash beacon_flood/et_beacon_flood.sh
 ```
 | env | 기본값 | 설명 |
 |-----|--------|------|
@@ -183,21 +187,30 @@ python3 detector/et_detector.py capture.pcap --json /tmp/et_logs/detect.json  # 
 
 ## 5. 파일 구성
 
-| 파일 | 역할 |
-|---|---|
-| `et_check_deps.sh` | 의존성 점검/설치 (`deps`) |
-| `et_scan.sh` | 주변 AP 스캔 → `et_config.conf` (`scan`) |
-| `lab_victim_ap.sh` | 실습용 피해 AP 생성 + 대상 자동 등록 (`ap`) |
-| `et_sniffing_attack.sh` | Evil Twin/스니핑 공격 본체 (`attack`) |
-| `et_beacon_flood.sh` | Beacon Flood 공격 (`beacon`) |
-| `et_capture.sh` | 관리 프레임 pcap 캡처 (`capture`) |
-| `et_stop.sh` | 실행 중인 공격 중지 (`stop`) |
-| `et_logger.sh` | 공격 이벤트 로깅 (JSONL/요약 JSON) |
-| `et_config.conf` | 공용 설정 파일 |
-| `bridge.py` | 대시보드 브리지 서버 (`/api/state`·`/api/exec`·`/api/exec/log`) |
-| `dashboard_html/` | 학습/실습 대시보드 (정적) |
-| `detector/et_detector.py` | Evil Twin·Beacon Flood 오프라인 pcap 탐지기 |
-| `docs/` | 설계·보안 문서 (`evil-twin-defense.md`, `security.md`, `files.md`, `main.md`) |
+공격 종류별로 폴더를 나눴다. 공유 파일(설정·로거·의존성 점검)은 루트에 둔다.
+
+```
+wfsat/
+├─ et_config.conf          # 공용 설정 (공격 대상·인터페이스·log_dir 등)
+├─ et_logger.sh            # 공격 이벤트 로깅 (JSONL/요약 JSON)
+├─ et_check_deps.sh        # 의존성 점검/설치            (deps)
+├─ evil_twin/
+│  ├─ et_scan.sh           # 주변 AP 스캔 → et_config.conf (scan)
+│  ├─ lab_victim_ap.sh     # 실습용 피해 AP 생성 + 대상 자동 등록 (ap)
+│  └─ et_sniffing_attack.sh# Evil Twin/스니핑 공격 본체    (attack)
+├─ beacon_flood/
+│  ├─ et_beacon_flood.sh   # Beacon Flood 공격            (beacon)
+│  └─ et_capture.sh        # 관리 프레임 pcap 캡처         (capture)
+├─ detector/
+│  └─ et_detector.py       # Evil Twin·Beacon Flood 오프라인 pcap 탐지기 (detect)
+├─ dashboard_html/
+│  ├─ bridge.py            # 브리지 서버 (/api/state·/api/exec·/api/exec/log)
+│  ├─ et_stop.sh           # 실행 중인 공격 중지          (stop)
+│  └─ index.html·app.js·…  # 학습/실습 대시보드 (정적)
+└─ docs/                   # 설계·보안 문서 (evil-twin-defense.md, security.md, …)
+```
+
+> 셸 스크립트들은 `et_config.conf`/`et_logger.sh`를 "같은 폴더 → 없으면 상위(루트)" 순으로 찾으므로, 서브폴더에 있어도 루트의 공용 파일을 그대로 쓴다.
 
 ### 주요 설정값 (`et_config.conf`)
 - `interface` — 공격 어댑터 (실행 시 `interface=`로 덮어쓰기 가능)
@@ -251,7 +264,7 @@ tailscale ip -4            # 서버 100.x.x.x → 노트북에서 http://<그 IP
 ```
 
 > 🔐 **원격 노출 시** — 콘솔(`/api/exec`)은 인증이 없다. 무인증 공개 URL로 열면 URL을 아는 누구나 서버에서 공격 명령을 실행할 수 있다.
-> - **화면만 보여줄 때** → `WFSAT_HOST=127.0.0.1 WFSAT_ENABLE_EXEC=0 python3 bridge.py`
+> - **화면만 보여줄 때** → `WFSAT_HOST=127.0.0.1 WFSAT_ENABLE_EXEC=0 python3 dashboard_html/bridge.py`
 > - **원격 조작이 필요할 때** → Tailscale(사설) 또는 인증 붙은 터널(ngrok `--basic-auth`, Cloudflare Access)
 > - 자세한 보안 논의: [docs/security.md](docs/security.md)
 
@@ -264,5 +277,5 @@ tailscale ip -4            # 서버 100.x.x.x → 노트북에서 http://<그 IP
 - **SSH/헤드리스**: X 디스플레이가 없으면 tmux 모드 사용:
   ```bash
   sudo tmux new -s airgeddon
-  AIRGEDDON_WINDOWS_HANDLING=tmux interface=wlan1 bash et_sniffing_attack.sh
+  AIRGEDDON_WINDOWS_HANDLING=tmux interface=wlan1 bash evil_twin/et_sniffing_attack.sh
   ```

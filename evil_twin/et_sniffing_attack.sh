@@ -7,7 +7,10 @@
 # ============================================================
 
 # --- 설정 파일 로드 ---
-_config_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_config.conf"
+# et_config.conf / et_logger.sh 는 스크립트와 같은 폴더 또는 상위(프로젝트 루트)에 있다.
+_base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "${_base_dir}/et_config.conf" ] || _base_dir="${_base_dir}/.."
+_config_file="${_base_dir}/et_config.conf"
 if [ ! -f "${_config_file}" ]; then
 	echo "[!] Config file not found: ${_config_file}" >&2
 	exit 1
@@ -23,7 +26,7 @@ _cli_interface="${interface:-}"
 source <(tr -d '\r' < "${_config_file}")
 
 # --- 로거 로드 ---
-_logger_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/et_logger.sh"
+_logger_file="${_base_dir}/et_logger.sh"
 if [ -f "${_logger_file}" ]; then
 	# shellcheck source=et_logger.sh
 	source <(tr -d '\r' < "${_logger_file}")

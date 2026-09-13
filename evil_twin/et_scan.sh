@@ -6,7 +6,12 @@
 
 # --- Load config ---
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_config_file="${_script_dir}/et_config.conf"
+# et_config.conf 는 스크립트와 같은 폴더 또는 상위(프로젝트 루트)에 있다.
+if [ -f "${_script_dir}/et_config.conf" ]; then
+    _config_file="${_script_dir}/et_config.conf"
+else
+    _config_file="${_script_dir}/../et_config.conf"
+fi
 
 if [ ! -f "${_config_file}" ]; then
     echo "[!] Config file not found: ${_config_file}" >&2

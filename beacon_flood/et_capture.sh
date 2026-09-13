@@ -14,6 +14,8 @@
 set -u
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# et_config.conf 는 스크립트와 같은 폴더 또는 상위(프로젝트 루트)에 있다.
+[ -f "${_script_dir}/et_config.conf" ] || _script_dir="${_script_dir}/.."
 _config_file="${_script_dir}/et_config.conf"
 
 _cli_interface="${interface:-}"

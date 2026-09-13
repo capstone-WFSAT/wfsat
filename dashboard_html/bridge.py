@@ -47,9 +47,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# 프로젝트 루트 = et_config.conf 가 있는 곳(스크립트 폴더 또는 그 상위).
+# bridge.py 가 루트에 있든(구 레이아웃) dashboard_html/ 안에 있든(신 레이아웃) 동작.
+if os.path.isfile(os.path.join(SCRIPT_DIR, "et_config.conf")):
+    PROJECT_ROOT = SCRIPT_DIR
+elif os.path.isfile(os.path.join(os.path.dirname(SCRIPT_DIR), "et_config.conf")):
+    PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+else:
+    PROJECT_ROOT = SCRIPT_DIR
+
+# 정적 파일 폴더: bridge.py 가 dashboard_html/ 안이면 자기 폴더, 아니면 하위 dashboard_html/.
+if os.path.basename(SCRIPT_DIR) == "dashboard_html":
+    _DEFAULT_STATIC = SCRIPT_DIR
+else:
+    _DEFAULT_STATIC = os.path.join(SCRIPT_DIR, "dashboard_html")
+
 LOG_DIR = os.environ.get("WFSAT_LOG_DIR", "/tmp/et_logs")
 DETECT_JSON = os.environ.get("WFSAT_DETECT_JSON", os.path.join(LOG_DIR, "detect.json"))
-STATIC_DIR = os.environ.get("WFSAT_STATIC_DIR", os.path.join(SCRIPT_DIR, "dashboard_html"))
+STATIC_DIR = os.environ.get("WFSAT_STATIC_DIR", _DEFAULT_STATIC)
 HOST = os.environ.get("WFSAT_HOST", "0.0.0.0")
 PORT = int(os.environ.get("WFSAT_PORT", "5000"))
 
@@ -91,19 +106,19 @@ def _is_root():
 ALLOWED_COMMANDS = [
     {"label": "의존성 점검", "alias": "deps", "prefix": "bash et_check_deps.sh", "group": "준비",
      "allow_args": True, "root": True, "background": True, "desc": "필요 도구 점검/설치 (--check-only 로 점검만)"},
-    {"label": "AP 스캔", "alias": "scan", "prefix": "bash et_scan.sh", "group": "준비",
+    {"label": "AP 스캔", "alias": "scan", "prefix": "bash evil_twin/et_scan.sh", "group": "준비",
      "allow_args": True, "root": True, "background": True, "desc": "주변 AP 스캔 → et_config.conf 저장"},
-    {"label": "피해 AP 실행", "alias": "ap", "prefix": "bash lab_victim_ap.sh", "group": "공격",
+    {"label": "피해 AP 실행", "alias": "ap", "prefix": "bash evil_twin/lab_victim_ap.sh", "group": "공격",
      "allow_args": True, "root": True, "background": True, "desc": "실습용 피해 AP 생성"},
-    {"label": "스니핑 공격 실행", "alias": "attack", "prefix": "bash et_sniffing_attack.sh", "group": "공격",
+    {"label": "스니핑 공격 실행", "alias": "attack", "prefix": "bash evil_twin/et_sniffing_attack.sh", "group": "공격",
      "allow_args": True, "root": True, "background": True, "desc": "가짜 AP+deauth+스니퍼"},
-    {"label": "Beacon Flood 공격", "alias": "beacon", "prefix": "bash et_beacon_flood.sh", "group": "공격",
+    {"label": "Beacon Flood 공격", "alias": "beacon", "prefix": "bash beacon_flood/et_beacon_flood.sh", "group": "공격",
      "allow_args": True, "root": True, "background": True, "desc": "고정 이름+숫자 SSID 대량 송출 (예: beacon, BF_COUNT=50 등은 env)"},
-    {"label": "패킷 캡처", "alias": "capture", "prefix": "bash et_capture.sh", "group": "탐지",
+    {"label": "패킷 캡처", "alias": "capture", "prefix": "bash beacon_flood/et_capture.sh", "group": "탐지",
      "allow_args": True, "root": True, "background": True, "desc": "관리 프레임 몇 초 캡처 → pcap 저장 (CAP_SECS/CAP_CHANNEL env)"},
     {"label": "Evil Twin/Beacon 탐지", "alias": "detect", "prefix": "python3 detector/et_detector.py", "group": "탐지",
      "allow_args": True, "root": True, "desc": "pcap 분석으로 Evil Twin·Beacon Flood 탐지 (인자로 pcap 경로)"},
-    {"label": "공격 중지", "alias": "stop", "prefix": "bash et_stop.sh", "group": "조회",
+    {"label": "공격 중지", "alias": "stop", "prefix": "bash dashboard_html/et_stop.sh", "group": "조회",
      "allow_args": True, "root": True, "desc": "실행 중인 공격 중지 (stop all = 피해 AP까지)"},
     {"label": "무선 인터페이스", "alias": "iface", "prefix": "iw dev", "group": "조회",
      "desc": "무선 인터페이스 목록"},
@@ -173,7 +188,7 @@ def _match_allowed(cmd):
 def _run_foreground(argv, cmd):
     try:
         proc = subprocess.run(
-            argv, cwd=SCRIPT_DIR, timeout=EXEC_TIMEOUT,
+            argv, cwd=PROJECT_ROOT, timeout=EXEC_TIMEOUT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
@@ -219,7 +234,7 @@ def _run_background(argv, cmd):
         logpath = "(로그 파일을 열 수 없음)"
     try:
         proc = subprocess.Popen(
-            argv, cwd=SCRIPT_DIR,
+            argv, cwd=PROJECT_ROOT,
             stdin=subprocess.DEVNULL, stdout=logfh, stderr=subprocess.STDOUT,
             start_new_session=True,
         )
