@@ -14,8 +14,6 @@ WiFi 이블트윈/스니핑 공격 실습 도구 모음. 스캔 → 가짜 AP �
 - [사용 방법 A — 격리된 실습 (권장, 자체 피해 AP)](#사용-방법-a--격리된-실습-권장-자체-피해-ap)
 - [사용 방법 B — 실제 대상 (외부 공유기)](#사용-방법-b--실제-대상-외부-공유기)
 - [탐지 분석 — detector/et_detector.py](#탐지-분석--detectoret_detectorpy)
-- [인터페이스 이름 문제 (wlan0/wlan1 뒤바뀜)](#인터페이스-이름-문제-wlan0wlan1-뒤바뀜)
-- [창 모드 (xterm / tmux)](#창-모드-xterm--tmux)
 - [대시보드 (실시간) — bridge.py + dashboard_html/](#대시보드-실시간--bridgepy--dashboard_html)
 - [파일 구성](#파일-구성)
 - [트러블슈팅](#트러블슈팅)
@@ -122,33 +120,6 @@ python3 detector/et_detector.py capture-01.cap --json /tmp/et_logs/detect.json
 **P0 탐지 신호:** S1 ESSID 안 zero-width 문자(가중치 0.45) · S2 1-nibble만 다른 쌍둥이 BSSID(0.20) · S3 암호화 다운그레이드 WPA→OPEN(0.15). `score ≥ 0.6` 또는 S1 참이면 **공격중**, `≥ 0.3`이면 **의심**, 그 외 **정상**.
 
 > 브리지 명령 콘솔(`/api/exec`)의 "Evil Twin 탐지" 명령으로도 실행할 수 있다(화이트리스트 등록됨).
-
----
-
-## 인터페이스 이름 문제 (wlan0/wlan1 뒤바뀜)
-
-`wlanX` 번호는 연결/부팅 순서에 따라 **바뀔 수 있다.** 그래서 실행할 때마다 인터페이스를 직접 지정하는 방식을 쓴다:
-```bash
-iw dev                                        # 지금 이름↔어댑터 확인
-sudo LAB_IFACE=<피해AP 어댑터> bash lab_victim_ap.sh
-sudo interface=<공격 어댑터> bash et_sniffing_attack.sh
-```
-`et_scan.sh` / `et_sniffing_attack.sh` 모두 `interface=` 환경변수를 지원한다 (config보다 우선, stale `phy_interface`는 자동 무시).
-
----
-
-## 창 모드 (xterm / tmux)
-
-공격 컴포넌트는 기본적으로 **xterm 창**에서 실행된다.
-
-- **GUI 데스크톱**: `xterm`만 설치돼 있으면 됨 (`et_check_deps.sh`가 설치).
-- **SSH/헤드리스**: X 디스플레이가 없으면 xterm이 안 뜬다. tmux 모드를 쓴다:
-  ```bash
-  sudo tmux new -s airgeddon
-  # tmux 세션 안(이미 root)에서:
-  AIRGEDDON_WINDOWS_HANDLING=tmux interface=wlanatk bash et_sniffing_attack.sh
-  ```
-  tmux 창 전환: `Ctrl+b` → `n`/`p` 또는 숫자키.
 
 ---
 
@@ -285,4 +256,31 @@ ngrok http 5000 --basic-auth "demo:비밀번호"
 - 방화벽: `sudo ufw status` / `sudo iptables -L INPUT -n`. 막혀 있으면 `sudo ufw allow 5000/tcp` 또는 `sudo iptables -I INPUT -p tcp --dport 5000 -j ACCEPT`.
 
 **인터페이스 이름이 매번 바뀐다**
-- 실행 시 `interface=` / `LAB_IFACE=`로 직접 지정한다 (위 "인터페이스 이름 문제" 참고).
+- 실행 시 `interface=` / `LAB_IFACE=`로 직접 지정한다 (아래 "인터페이스 이름 문제" 참고).
+
+---
+
+## 인터페이스 이름 문제 (wlan0/wlan1 뒤바뀜)
+
+`wlanX` 번호는 연결/부팅 순서에 따라 **바뀔 수 있다.** 그래서 실행할 때마다 인터페이스를 직접 지정하는 방식을 쓴다:
+```bash
+iw dev                                        # 지금 이름↔어댑터 확인
+sudo LAB_IFACE=<피해AP 어댑터> bash lab_victim_ap.sh
+sudo interface=<공격 어댑터> bash et_sniffing_attack.sh
+```
+`et_scan.sh` / `et_sniffing_attack.sh` 모두 `interface=` 환경변수를 지원한다 (config보다 우선, stale `phy_interface`는 자동 무시).
+
+---
+
+## 창 모드 (xterm / tmux)
+
+공격 컴포넌트는 기본적으로 **xterm 창**에서 실행된다.
+
+- **GUI 데스크톱**: `xterm`만 설치돼 있으면 됨 (`et_check_deps.sh`가 설치).
+- **SSH/헤드리스**: X 디스플레이가 없으면 xterm이 안 뜬다. tmux 모드를 쓴다:
+  ```bash
+  sudo tmux new -s airgeddon
+  # tmux 세션 안(이미 root)에서:
+  AIRGEDDON_WINDOWS_HANDLING=tmux interface=wlanatk bash et_sniffing_attack.sh
+  ```
+  tmux 창 전환: `Ctrl+b` → `n`/`p` 또는 숫자키.
