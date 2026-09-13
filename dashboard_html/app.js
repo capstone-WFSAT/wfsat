@@ -1,6 +1,13 @@
 (function () {
   "use strict";
 
+  // 접속(페이지 로드)할 때마다 이전 상태를 초기화한다.
+  // 학습 진행/사이드바 접힘/실습 단계 진행 등 브라우저에 저장된 상태를 모두 지운다.
+  try {
+    ["wfsat-learning-history-v1", "wfsat.sidebarCollapsed", "wfsat.ranSteps"]
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* localStorage 사용 불가 환경은 무시 */ }
+
   const scenarios = window.WFSAT_SCENARIOS || [];
   if (!scenarios.length) {
     document.body.innerHTML = "<p style='padding:2rem;color:white'>시나리오 데이터를 불러오지 못했습니다.</p>";
