@@ -190,7 +190,8 @@ score = 0.45*S1 + 0.20*S2 + 0.15*S3 + 0.10*S4 + 0.05*S5 + 0.15*S6   # S6는 클�
 - **캡처(기존 재사용, bash)**: `et_scan.sh` 의 모니터 모드 + `airodump-ng -w` 로 pcap 저장.
 - **분석(신규 기여, Python + scapy)**: [`detector/et_detector.py`](../detector/et_detector.py) 가
   pcap 을 파싱해 S1~S6 신호·상관 점수를 계산하고 AP 테이블/findings 를 JSON 으로 출력.
-- **시각화(기존 재사용, Python)**: `dashboard/app.py`(Streamlit) 가 그 JSON 을 소비.
+- **시각화(신규 기여, 정적 웹 + Python)**: 정적 대시보드([`dashboard_html/`](../dashboard_html/))를
+  [`bridge.py`](../bridge.py)(표준 라이브러리 HTTP 서버)가 서빙하고, 그 JSON 을 `/api/state` 로 소비.
 
 이유:
 - **재현성** — 같은 pcap 에 항상 같은 결과. 임계값 튜닝 반복 가능.

@@ -122,96 +122,6 @@
       ]
     },
     {
-      id: "auth-dos",
-      icon: "🚧",
-      shortName: "인증 DoS",
-      title: "인증 요청 서비스 거부",
-      english: "Authentication DoS",
-      layer: "802.11 Authentication",
-      summary: "공격자가 수많은 가짜 MAC 주소로 인증 요청을 보내 AP의 처리 자원을 고갈시키고 정상 사용자의 연결을 방해하는 과정을 봅니다.",
-      learning: {
-        estimatedMinutes: 3,
-        objectives: ["인증 요청과 정상 연결의 차이 보기", "랜덤 MAC 요청 폭증이 AP에 미치는 영향 이해하기", "요청 비율 제한의 목적 알기"],
-        checkpoint: {
-          prompt: "인증 요청 서비스 거부 공격의 대표적인 관측 패턴은 무엇인가요?",
-          options: [
-            { id: "a", label: "한 사용자가 정상적으로 인증을 한 번 완료합니다." },
-            { id: "b", label: "AP가 정해진 간격으로 Beacon을 보냅니다." },
-            { id: "c", label: "많은 랜덤 MAC 주소가 짧은 시간에 인증 요청을 반복합니다." }
-          ],
-          correctOptionId: "c",
-          explanation: "수많은 가짜 송신자가 인증 요청을 반복하면 AP의 인증 처리 큐가 차고 정상 사용자의 요청이 지연되거나 거부될 수 있습니다.",
-          reviewPhaseIndex: 2
-        }
-      },
-      technical: "Authentication request 비율, 고유 source MAC 수, 응답 지연과 Association 실패율을 함께 분석합니다. 연속적으로 바뀌는 MAC에서 같은 AP로 요청이 몰리면 공격 가능성이 큽니다.",
-      baseAps: 3,
-      nodes: [
-        { id: "client", role: "client", icon: "💻", label: "정상 사용자", detail: "연결 요청 대기" },
-        { id: "real-ap", role: "real-ap", icon: "📡", label: "테스트 AP", detail: "인증 처리 큐" },
-        { id: "attacker", role: "attacker", icon: "🚧", label: "가짜 클라이언트", detail: "랜덤 MAC 생성" },
-        { id: "sensor", role: "sensor", icon: "🔎", label: "WFSAT 센서", detail: "Auth rate 분석" }
-      ],
-      defense: { name: "요청 속도 제한", description: "동일 AP로 들어오는 인증 요청 속도와 MAC 생성 패턴을 제한하고 비정상 source를 임시 차단합니다.", before: "정상 인증 실패", after: "정상 요청 우선 처리" },
-      glossary: [
-        { term: "Authentication", description: "무선 기기가 AP에 연결하기 전 신원을 확인하는 초기 단계입니다." },
-        { term: "DoS", description: "서비스 자원을 소모시켜 정상 사용자가 이용하지 못하게 하는 공격입니다." },
-        { term: "Rate Limit", description: "짧은 시간에 허용하는 요청 수를 제한하는 방어 방식입니다." }
-      ],
-      phases: [
-        { label: "정상 상태", kicker: "NORMAL AUTH", title: "소수의 사용자가 순서대로 인증합니다", description: "AP의 인증 처리 큐와 응답 시간이 안정적입니다.", plain: "사용자가 연결을 요청하면 AP가 바로 응답할 수 있는 상태입니다.", severity: "neutral", rate: 19, alerts: 0, evidence: ["인증 요청 2~4회/초", "응답 시간 18ms", "고유 MAC 증가율 안정"], states: { client: "normal", "real-ap": "normal", attacker: "idle", sensor: "normal" }, links: [link("client", "real-ap", "normal", "Auth Request"), link("real-ap", "sensor", "normal", "정상 응답")], packet: packet("client", "real-ap", "AUTH", "normal"), event: event("Authentication", "normal", "8C:F5:A3:11:02:44", "Open System 인증 성공", "정상"), packetFields: { "Auth Rate": "3 req/s", "Response": "18ms", "Result": "Success" } },
-        { label: "공격 준비", kicker: "MAC ROTATION", title: "공격자가 수백 개의 가짜 MAC을 생성합니다", description: "각 요청이 다른 기기처럼 보이도록 source 주소가 빠르게 바뀝니다.", plain: "한 공격자가 수많은 새 기기인 것처럼 신분을 계속 바꾸고 있습니다.", severity: "medium", rate: 84, alerts: 5, evidence: ["로컬 관리 MAC 비율 증가", "MAC 주소가 일정 패턴으로 회전", "동일 장비 특성의 요청 반복"], states: { client: "normal", "real-ap": "normal", attacker: "warning", sensor: "warning" }, links: [link("client", "real-ap", "normal", "정상 요청"), link("attacker", "sensor", "warning", "MAC Rotation")], packet: packet("attacker", "sensor", "MAC++", "warning"), event: event("MAC Rotation", "warning", "02:AA:xx:xx:xx:xx", "고유 source 62개 / 5s", "의심"), packetFields: { "Unique Source": "62 / 5s", "Local MAC": "94%", "Target": "CC:33:44:55:66:03" } },
-        { label: "공격 진행", kicker: "AUTH REQUEST FLOOD", title: "가짜 인증 요청이 AP로 폭주합니다", description: "랜덤 MAC에서 생성된 요청이 인증 처리 큐를 빠르게 채웁니다.", plain: "가짜 사용자들이 한꺼번에 줄을 서서 AP가 정상 사용자를 처리하지 못하게 합니다.", severity: "high", rate: 634, alerts: 44, evidence: ["인증 요청 521회/초", "고유 source MAC 410개", "정상 범위 대비 173배 증가"], states: { client: "warning", "real-ap": "danger", attacker: "danger", sensor: "warning" }, links: [link("attacker", "real-ap", "attack", "Auth Flood"), link("client", "real-ap", "warning", "정상 요청 지연"), link("attacker", "sensor", "attack", "521 req/s")], packet: packet("attacker", "real-ap", "AUTH×", "attack"), event: event("Auth Flood", "attack", "02:AA:xx:xx:xx:xx", "521 req/s · 410 sources", "위험"), packetFields: { "Auth Rate": "521 req/s", "Unique Source": "410", "Queue": "96%" } },
-        { label: "영향 발생", kicker: "SERVICE EXHAUSTED", title: "정상 사용자의 인증이 지연되거나 실패합니다", description: "AP의 처리 큐가 가득 차고 정상 요청의 응답 시간이 크게 늘어납니다.", plain: "정상 사용자가 와이파이에 연결하려 해도 AP가 너무 바빠 응답하지 못합니다.", severity: "critical", rate: 802, alerts: 71, evidence: ["정상 인증 실패율 81%", "평균 응답 시간 2.8초", "Association 재시도 19회"], states: { client: "offline", "real-ap": "danger", attacker: "danger", sensor: "danger" }, links: [link("attacker", "real-ap", "attack", "큐 포화"), link("client", "real-ap", "inactive", "인증 실패"), link("sensor", "real-ap", "warning", "자원 고갈")], packet: packet("attacker", "real-ap", "AUTH×", "attack"), event: event("Auth Timeout", "attack", "정상 사용자", "응답 2.8s · 실패율 81%", "심각"), packetFields: { "Failure Rate": "81%", "Response": "2.8s", "Retry": "19" } },
-        { label: "탐지·대응", kicker: "RATE LIMITED", title: "비정상 요청을 제한해 인증 서비스를 복구합니다", description: "센서는 source 다양성과 요청 속도를 기준으로 공격 그룹을 묶고 제한합니다.", plain: "가짜 사용자들의 요청 속도를 줄여 정상 사용자가 다시 연결할 수 있게 했습니다.", severity: "resolved", rate: 42, alerts: 1, evidence: ["랜덤 MAC 군집 식별", "인증 요청 임계값 초과 source 제한", "정상 인증 응답 24ms로 회복"], states: { client: "defense", "real-ap": "defense", attacker: "danger", sensor: "defense" }, links: [link("client", "real-ap", "defense", "정상 Auth"), link("sensor", "attacker", "defense", "Rate Limit")], packet: packet("client", "real-ap", "AUTH OK", "defense"), event: event("Rate Limit", "defense", "WFSAT", "비정상 source 군집 제한", "대응 완료"), packetFields: { "Detection": "Authentication DoS", "Blocked Group": "410 MAC", "Response": "24ms" } }
-      ]
-    },
-    {
-      id: "wids-confusion",
-      icon: "🌀",
-      shortName: "WIDS 혼란",
-      title: "WIDS/WIPS 혼란 공격",
-      english: "WIDS Confusion",
-      layer: "관리 프레임 이상",
-      summary: "서로 모순되는 주소와 상태를 가진 관리 프레임을 대량으로 전송해 무선 침입 탐지 센서의 판단을 흐리는 과정을 확인합니다.",
-      learning: {
-        estimatedMinutes: 4,
-        objectives: ["단일 경고가 오탐일 수 있음을 이해하기", "모순된 주소·상태 전이 찾기", "여러 신호를 함께 분석하는 이유 알기"],
-        checkpoint: {
-          prompt: "WIDS 혼란 공격을 안정적으로 판별하려면 어떤 방식이 적절한가요?",
-          options: [
-            { id: "a", label: "경고 프레임 하나만 보고 즉시 공격으로 확정합니다." },
-            { id: "b", label: "주소, 채널, 시간 순서와 상태 전이를 함께 비교합니다." },
-            { id: "c", label: "모든 관리 프레임을 정상으로 처리합니다." }
-          ],
-          correctOptionId: "b",
-          explanation: "혼란 공격은 서로 모순되는 신호로 센서를 속입니다. 따라서 단일 프레임보다 주소·채널·시계열·상태 전이의 일관성을 함께 봐야 합니다.",
-          reviewPhaseIndex: 3
-        }
-      },
-      technical: "불가능한 상태 전이, BSSID/채널 불일치, sequence 재사용, 비정상 subtype 조합과 source 회전 속도를 함께 분석합니다. 단일 프레임보다 연속된 모순 패턴이 핵심입니다.",
-      baseAps: 5,
-      nodes: [
-        { id: "client", role: "client", icon: "💻", label: "정상 단말", detail: "정상 상태 전이" },
-        { id: "real-ap", role: "real-ap", icon: "📡", label: "정상 AP", detail: "고정 BSSID/채널" },
-        { id: "attacker", role: "attacker", icon: "🌀", label: "혼란 프레임 생성기", detail: "모순 상태·주소" },
-        { id: "sensor", role: "sensor", icon: "🛡️", label: "WIDS 센서", detail: "상관분석 엔진" }
-      ],
-      defense: { name: "상태 전이 상관분석", description: "개별 경고 개수보다 동일 송신 특성과 불가능한 연결 순서를 묶어 하나의 공격 캠페인으로 처리합니다.", before: "수백 개 경고 생성", after: "공격 캠페인 1건" },
-      glossary: [
-        { term: "WIDS", description: "무선 환경의 이상 프레임과 침입을 탐지하는 시스템입니다." },
-        { term: "WIPS", description: "탐지를 넘어 차단·격리 대응까지 수행하는 무선 보호 시스템입니다." },
-        { term: "상태 전이", description: "탐색→인증→연결처럼 정상적으로 이어지는 연결 단계입니다." }
-      ],
-      phases: [
-        { label: "정상 상태", kicker: "CONSISTENT STATE", title: "AP와 단말의 연결 상태가 순서대로 이어집니다", description: "BSSID, 채널, sequence와 연결 단계가 서로 일치합니다.", plain: "정상 통신은 ‘탐색하고 인증한 뒤 연결’처럼 순서가 자연스럽습니다.", severity: "neutral", rate: 36, alerts: 0, evidence: ["정상 상태 전이", "BSSID와 채널 정보 일치", "sequence 연속성 유지"], states: { client: "normal", "real-ap": "normal", attacker: "idle", sensor: "normal" }, links: [link("client", "real-ap", "normal", "정상 시퀀스"), link("real-ap", "sensor", "normal", "일관된 상태")], packet: packet("client", "real-ap", "ASSOC", "normal"), event: event("State Update", "normal", "정상 단말", "Auth → Association", "정상"), packetFields: { "State": "Authenticated → Associated", "Channel": "6", "Sequence": "882" } },
-        { label: "공격 준비", kicker: "CRAFTED FRAMES", title: "공격자가 모순된 관리 프레임 조합을 준비합니다", description: "존재하지 않는 BSSID와 어긋난 채널·sequence가 생성됩니다.", plain: "공격자가 앞뒤가 맞지 않는 연결 기록을 여러 장 만들어 센서를 속이려 합니다.", severity: "medium", rate: 91, alerts: 7, evidence: ["미등록 BSSID 증가", "동일 sequence 재사용", "채널 정보 불일치"], states: { client: "normal", "real-ap": "normal", attacker: "warning", sensor: "warning" }, links: [link("client", "real-ap", "normal", "정상 통신"), link("attacker", "sensor", "warning", "모순 프레임")], packet: packet("attacker", "sensor", "SEQ?", "warning"), event: event("Malformed State", "warning", "02:FE:xx:xx:xx:01", "Association without Auth", "의심"), packetFields: { "State": "Association without Auth", "Channel": "6 / 11 mismatch", "Sequence": "1024 reused" } },
-        { label: "공격 진행", kicker: "ALERT STORM", title: "서로 다른 가짜 사건이 센서로 쏟아집니다", description: "주소와 유형을 바꾼 모순 프레임이 대량 전송되어 경고를 폭발시킵니다.", plain: "센서가 진짜 공격을 찾기 어렵도록 수백 개의 가짜 사건을 동시에 만들고 있습니다.", severity: "high", rate: 588, alerts: 184, evidence: ["20개 subtype 조합 급증", "가짜 BSSID 126개", "1초 동안 모순 상태 184건"], states: { client: "normal", "real-ap": "warning", attacker: "danger", sensor: "danger" }, links: [link("attacker", "sensor", "attack", "Alert Storm"), link("attacker", "real-ap", "attack", "State Confusion"), link("client", "real-ap", "normal", "정상 신호")], packet: packet("attacker", "sensor", "ALERT×", "attack"), event: event("Alert Storm", "attack", "02:FE:xx:xx:xx:xx", "모순 상태 184건 / 1s", "위험"), packetFields: { "Invalid State": "184 / 1s", "Fake BSSID": "126", "Subtype Mix": "20" } },
-        { label: "영향 발생", kicker: "SENSOR OVERLOAD", title: "중요 경고가 가짜 경고 사이에 묻힙니다", description: "센서 자원과 분석가의 주의가 분산되어 실제 Deauth 이벤트의 우선순위가 낮아집니다.", plain: "가짜 경보가 너무 많아 진짜 위험 경보를 놓칠 수 있는 상태입니다.", severity: "critical", rate: 731, alerts: 246, evidence: ["경고 큐 사용률 94%", "실제 Deauth 분류 지연 3.7초", "중복 경고가 전체의 88%"], states: { client: "warning", "real-ap": "warning", attacker: "danger", sensor: "danger" }, links: [link("attacker", "sensor", "attack", "센서 과부하"), link("real-ap", "sensor", "warning", "진짜 경고 지연"), link("client", "real-ap", "warning", "위험 노출")], packet: packet("attacker", "sensor", "NOISE", "attack"), event: event("Sensor Overload", "attack", "WIDS Queue", "사용률 94% · 지연 3.7s", "심각"), packetFields: { "Alert Queue": "94%", "Duplicate": "88%", "Detection Delay": "3.7s" } },
-        { label: "탐지·대응", kicker: "CAMPAIGN CORRELATION", title: "가짜 경고를 하나의 공격 캠페인으로 묶습니다", description: "송신 특성, 시간 간격, 상태 모순을 상관분석해 중복 경고를 압축합니다.", plain: "수백 개의 가짜 사건이 사실은 한 공격자에게서 나온 공격이라는 것을 알아냈습니다.", severity: "resolved", rate: 61, alerts: 1, evidence: ["동일 RF 특성으로 source 군집화", "상태 전이 위반 패턴 일치", "246개 경고를 캠페인 1건으로 축약"], states: { client: "defense", "real-ap": "defense", attacker: "danger", sensor: "defense" }, links: [link("real-ap", "sensor", "defense", "정상 우선"), link("sensor", "attacker", "defense", "군집 차단")], packet: packet("sensor", "attacker", "GROUP", "defense"), event: event("Campaign Grouped", "defense", "WFSAT", "246 alerts → 1 campaign", "대응 완료"), packetFields: { "Detection": "WIDS Confusion", "Grouped Alerts": "246", "Campaign": "1" } }
-      ]
-    },
-    {
       id: "karma",
       icon: "🎭",
       shortName: "KARMA",
@@ -302,48 +212,48 @@
       ]
     },
     {
-      id: "handshake",
-      icon: "🤝",
-      shortName: "핸드셰이크",
-      title: "WPA 핸드셰이크·PMKID 수집",
-      english: "WPA Handshake / PMKID",
-      layer: "EAPOL · WPA 인증",
-      summary: "클라이언트가 AP에 연결할 때 오가는 EAPOL 4단계 메시지와 PMKID가 어떻게 캡처되고 검증되는지 시퀀스로 살펴봅니다.",
+      id: "wps",
+      icon: "🔐",
+      shortName: "WPS 공격",
+      title: "WPS PIN 공격",
+      english: "WPS Attack",
+      layer: "AP 설정 · WPS",
+      summary: "공격자가 공유기의 WPS 기능을 악용해 8자리 PIN을 알아내고, 이를 이용해 WPA 비밀번호까지 복구하는 과정을 확인합니다.",
       learning: {
-        estimatedMinutes: 5,
-        objectives: ["4-way Handshake의 의미 이해하기", "캡처와 비밀번호 유출을 구분하기", "강한 암호와 WPA3-SAE의 이점 알기"],
+        estimatedMinutes: 4,
+        objectives: ["WPS PIN(8자리) 구조의 약점 이해하기", "짧은 시간의 PIN 시도 급증을 이상 징후로 찾기", "WPS 비활성화·잠금 방어의 목적 이해하기"],
         checkpoint: {
-          prompt: "완전한 WPA 핸드셰이크가 캡처되었다는 설명으로 옳은 것은 무엇인가요?",
+          prompt: "WPS 공격을 가장 직접적으로 보여 주는 징후는 무엇인가요?",
           options: [
-            { id: "a", label: "와이파이 비밀번호가 즉시 평문으로 노출됐다는 뜻입니다." },
-            { id: "b", label: "암호화가 자동으로 해제되어 모든 트래픽을 읽을 수 있습니다." },
-            { id: "c", label: "인증 교환이 기록됐으며 약한 비밀번호는 오프라인 추측 위험이 있습니다." }
+            { id: "a", label: "정상 클라이언트가 주기적으로 Probe를 보냅니다." },
+            { id: "b", label: "같은 공격자가 짧은 시간에 수많은 WPS PIN 인증을 반복 시도합니다." },
+            { id: "c", label: "AP가 정상 Beacon을 전송합니다." }
           ],
-          correctOptionId: "c",
-          explanation: "핸드셰이크 캡처 자체는 비밀번호 유출이 아닙니다. 다만 짧고 흔한 비밀번호는 캡처 데이터를 이용한 오프라인 추측에 취약할 수 있습니다.",
-          reviewPhaseIndex: 4
+          correctOptionId: "b",
+          explanation: "WPS PIN은 앞뒤 절반이 나뉘어 검증되어 경우의 수가 작습니다. 한 장치가 짧은 시간에 EAP 기반 WPS 인증을 대량으로 반복하면 PIN 무차별 대입 또는 Pixie Dust 공격의 강한 근거입니다.",
+          reviewPhaseIndex: 2
         }
       },
-      technical: "EAPOL-Key message의 ACK, MIC, Install, Secure 플래그와 replay counter를 조합해 M1~M4 순서를 판별합니다. RSN 정보의 PMKID 필드도 별도로 확인합니다.",
-      baseAps: 3,
+      technical: "wash 로 WPS 활성 AP 를 식별한 뒤 reaver/bully 로 EAP-WSC(M1~M8) 교환을 반복하며 PIN 을 추정합니다. Pixie Dust 는 취약한 난수(E-S1/E-S2)를 이용해 오프라인으로 PIN 을 즉시 계산합니다. 복구된 PIN 으로 WPA PSK 가 그대로 노출됩니다.",
+      baseAps: 1,
       nodes: [
-        { id: "client", role: "client", icon: "💻", label: "연결 클라이언트", detail: "Supplicant" },
-        { id: "real-ap", role: "real-ap", icon: "📡", label: "WPA2 AP", detail: "Authenticator" },
-        { id: "attacker", role: "attacker", icon: "📻", label: "패킷 수집자", detail: "모니터 모드" },
-        { id: "sensor", role: "sensor", icon: "🧩", label: "WFSAT 분석기", detail: "EAPOL 시퀀스" }
+        { id: "client", role: "client", icon: "📱", label: "정상 사용자", detail: "정상 연결 유지" },
+        { id: "real-ap", role: "real-ap", icon: "📶", label: "WPS 공유기", detail: "Home_WiFi · WPS ON" },
+        { id: "attacker", role: "attacker", icon: "🔓", label: "WPS 크래커", detail: "reaver / pixiewps" },
+        { id: "sensor", role: "sensor", icon: "🔎", label: "WFSAT 센서", detail: "WPS 인증 감시" }
       ],
-      defense: { name: "강한 암호·WPA3 SAE", description: "복잡한 비밀번호를 사용하고 오프라인 사전 대입에 강한 WPA3-SAE로 전환합니다. PMF를 함께 사용해 강제 재연결도 줄입니다.", before: "오프라인 추측 가능", after: "SAE로 재사용 공격 완화" },
+      defense: { name: "WPS 비활성화·AP 잠금", description: "WPS 기능을 끄거나 실패 임계값 초과 시 WPS 를 일정 시간 잠가 PIN 무차별 대입과 Pixie Dust 를 차단합니다.", before: "PIN 무제한 시도 허용", after: "WPS 잠금·비활성화" },
       glossary: [
-        { term: "EAPOL", description: "WPA 연결 과정에서 키 정보를 교환하는 프레임입니다." },
-        { term: "4-way Handshake", description: "AP와 클라이언트가 암호화 키를 확인하는 네 단계 교환입니다." },
-        { term: "PMKID", description: "AP가 키 캐시를 식별하기 위해 사용하는 값으로 일부 환경에서 캡처될 수 있습니다." }
+        { term: "WPS", description: "버튼이나 PIN 으로 와이파이를 쉽게 연결하게 해 주는 기능입니다." },
+        { term: "PIN 무차별 대입", description: "가능한 PIN 을 하나씩 대입해 맞는 값을 찾는 공격입니다." },
+        { term: "Pixie Dust", description: "AP 의 약한 난수를 이용해 PIN 을 오프라인으로 즉시 계산하는 공격입니다." }
       ],
       phases: [
-        { label: "정상 상태", kicker: "ENCRYPTED SESSION", title: "클라이언트가 암호화된 세션으로 통신합니다", description: "이미 인증이 완료되어 일반 데이터 프레임만 관측됩니다.", plain: "현재 연결은 암호화되어 있고 새 인증 메시지는 오가지 않습니다.", severity: "neutral", rate: 51, alerts: 0, evidence: ["EAPOL 프레임 없음", "데이터 프레임 Protected bit 활성", "연결 상태 안정"], states: { client: "normal", "real-ap": "normal", attacker: "idle", sensor: "normal" }, links: [link("client", "real-ap", "normal", "암호화 Data"), link("real-ap", "sensor", "normal", "정상 세션")], packet: packet("client", "real-ap", "DATA", "normal"), event: event("Encrypted Data", "normal", "연결 클라이언트", "Protected data frame", "정상"), packetFields: { "Protected": "1", "EAPOL": "None", "Association": "Active" } },
-        { label: "공격 준비", kicker: "CAPTURE READY", title: "수집자가 타겟 채널에서 EAPOL을 기다립니다", description: "모니터 인터페이스가 AP 채널과 BSSID로 필터링됩니다.", plain: "분석기가 새로 연결하는 순간에만 나오는 인증 메시지를 기다리고 있습니다.", severity: "low", rate: 58, alerts: 0, evidence: ["BSSID 화이트리스트 필터 적용", "EAPOL 표시 필터 활성", "아직 핸드셰이크 없음"], states: { client: "normal", "real-ap": "normal", attacker: "warning", sensor: "normal" }, links: [link("client", "real-ap", "normal", "기존 연결"), link("attacker", "sensor", "warning", "캡처 대기")], packet: packet("real-ap", "sensor", "BEACON", "warning"), event: event("Capture Armed", "warning", "wlan1mon", "BSSID·CH 6 필터 적용", "대기"), packetFields: { "Filter": "EAPOL or PMKID", "Channel": "6", "BSSID": "CC:33:44:55:66:03" } },
-        { label: "공격 진행", kicker: "RECONNECTION TRIGGER", title: "재연결 과정에서 EAPOL 메시지가 시작됩니다", description: "격리 실습에서 클라이언트를 재연결하면 AP가 M1을 보내고 키 교환이 진행됩니다.", plain: "기기가 와이파이에 다시 연결하면서 서로 암호를 알고 있는지 확인하는 네 번의 대화가 시작됩니다.", severity: "medium", rate: 132, alerts: 6, evidence: ["EAPOL M1·M2 순서 확인", "replay counter가 정상 증가", "AP와 등록 클라이언트 주소 일치"], states: { client: "warning", "real-ap": "warning", attacker: "warning", sensor: "warning" }, links: [link("real-ap", "client", "warning", "EAPOL M1"), link("client", "real-ap", "warning", "EAPOL M2"), link("real-ap", "sensor", "warning", "시퀀스 캡처")], packet: packet("real-ap", "client", "M1", "warning"), event: event("EAPOL M1/M2", "warning", "WPA2 AP", "Replay counter 15 → 16", "수집 중"), packetFields: { "EAPOL": "M1, M2", "Replay Counter": "15 → 16", "MIC": "M2 present" } },
-        { label: "영향 발생", kicker: "HANDSHAKE CAPTURED", title: "M1부터 M4까지 완전한 교환이 수집됩니다", description: "분석기는 플래그와 replay counter를 이용해 완전한 핸드셰이크임을 확인합니다.", plain: "네 단계의 인증 대화가 모두 기록되어 나중에 비밀번호 강도를 시험할 수 있는 상태입니다.", severity: "high", rate: 146, alerts: 12, evidence: ["M1·M2·M3·M4 모두 존재", "AP–클라이언트 쌍 일치", "MIC와 replay counter 검증 통과"], states: { client: "normal", "real-ap": "normal", attacker: "danger", sensor: "danger" }, links: [link("client", "real-ap", "warning", "EAPOL M1–M4"), link("real-ap", "sensor", "attack", "Handshake Capture"), link("attacker", "sensor", "attack", "PCAP 저장")], packet: packet("client", "real-ap", "M4", "attack"), event: event("Handshake Complete", "attack", "WFSAT", "EAPOL M1–M4 검증 완료", "위험"), packetFields: { "EAPOL": "M1 M2 M3 M4", "MIC": "Valid structure", "PCAP": "session-008.pcap" } },
-        { label: "탐지·대응", kicker: "PASSWORD RISK", title: "캡처 사실과 비밀번호 위험을 구분해 설명합니다", description: "핸드셰이크 캡처 자체는 비밀번호 유출이 아니지만 약한 암호는 오프라인 추측에 노출될 수 있습니다.", plain: "인증 대화가 기록됐다고 바로 암호가 풀린 것은 아니지만, 짧고 흔한 비밀번호는 위험합니다.", severity: "resolved", rate: 54, alerts: 1, evidence: ["완전한 핸드셰이크 캡처 확인", "실제 자격증명 값은 저장하지 않음", "WPA3-SAE와 강한 암호 권고"], states: { client: "defense", "real-ap": "defense", attacker: "warning", sensor: "defense" }, links: [link("client", "real-ap", "defense", "WPA3-SAE"), link("sensor", "attacker", "defense", "캡처 경고")], packet: packet("client", "real-ap", "SAE", "defense"), event: event("Security Guidance", "defense", "WFSAT", "WPA3-SAE·강한 암호 권고", "대응 완료"), packetFields: { "Finding": "Handshake captured", "Credential Stored": "No", "Recommendation": "WPA3-SAE" } }
+        { label: "정상 상태", kicker: "WPS ENABLED", title: "WPS 가 켜져 있지만 인증 시도는 없습니다", description: "공유기는 WPS 를 지원하고 정상 사용자만 WPA2 로 연결되어 있습니다.", plain: "간편 연결 기능이 켜져 있을 뿐, 아무도 PIN 을 시도하지 않는 평상시 상태입니다.", severity: "neutral", rate: 26, alerts: 0, evidence: ["WPS 활성·인증 시도 없음", "정상 클라이언트만 연결", "기준선 안정"], states: { client: "normal", "real-ap": "normal", attacker: "idle", sensor: "normal" }, links: [link("real-ap", "client", "normal", "WPA2 연결"), link("real-ap", "sensor", "normal", "기준 정보")], packet: packet("real-ap", "client", "DATA", "normal"), event: event("Association", "normal", "Home_WiFi", "정상 연결 유지", "정상"), packetFields: { "SSID": "Home_WiFi", "Security": "WPA2", "WPS": "Enabled" } },
+        { label: "공격 준비", kicker: "WPS DISCOVERY", title: "공격자가 WPS 활성 AP 를 찾습니다", description: "wash 로 주변 AP 의 WPS 상태와 잠금 여부를 수집합니다.", plain: "공격자가 간편 연결이 켜져 있고 잠기지 않은 공유기를 먼저 물색합니다.", severity: "low", rate: 42, alerts: 0, evidence: ["wash 로 WPS 활성 AP 관측", "WPS Locked=No 확인", "아직 PIN 시도 없음"], states: { client: "normal", "real-ap": "normal", attacker: "warning", sensor: "normal" }, links: [link("attacker", "real-ap", "warning", "WPS 탐색"), link("attacker", "sensor", "warning", "WPS 상태 조회")], packet: packet("attacker", "real-ap", "WPS SCAN", "warning"), event: event("WPS Discovery", "warning", "Home_WiFi", "WPS Unlocked · v1.0", "관찰"), packetFields: { "WPS": "Enabled", "Locked": "No", "Version": "1.0" } },
+        { label: "공격 진행", kicker: "PIN BRUTEFORCE", title: "WPS PIN 인증이 대량으로 반복됩니다", description: "reaver/pixiewps 가 EAP-WSC 교환을 반복하며 PIN 을 추정합니다.", plain: "공격자가 짧은 시간에 수천 번의 비밀번호 핀을 빠르게 대입합니다.", severity: "high", rate: 188, alerts: 19, evidence: ["동일 출처의 WPS EAP 인증 폭증", "M4 이후 반복 실패(EAP-NACK)", "Pixie Dust 용 E-S1/E-S2 수집"], states: { client: "normal", "real-ap": "warning", attacker: "danger", sensor: "warning" }, links: [link("attacker", "real-ap", "attack", "WPS PIN 시도"), link("real-ap", "attacker", "warning", "EAP-NACK"), link("attacker", "sensor", "attack", "인증 폭증")], packet: packet("attacker", "real-ap", "WPS M4", "attack"), event: event("WPS Bruteforce", "attack", "DE:AD:BE:EF:11:07", "초당 다수 PIN 시도", "위험"), packetFields: { "Method": "EAP-WSC", "Attempts": "4211", "Response": "NACK" } },
+        { label: "영향 발생", kicker: "PIN CRACKED", title: "유효 PIN 이 확인되어 WPA 암호가 노출됩니다", description: "M6 성공으로 유효 PIN 이 확정되면 AP 가 WPA PSK 를 그대로 넘겨줍니다.", plain: "핀 하나가 맞는 순간 와이파이 비밀번호 전체가 공격자에게 넘어갑니다.", severity: "critical", rate: 92, alerts: 27, evidence: ["유효 PIN 확인(M6 성공)", "WPA PSK 평문 노출", "공격자 무단 연결 가능"], states: { client: "warning", "real-ap": "danger", attacker: "danger", sensor: "danger" }, links: [link("attacker", "real-ap", "attack", "유효 PIN 획득"), link("real-ap", "attacker", "attack", "PSK 전달"), link("sensor", "attacker", "warning", "탈취 추적")], packet: packet("real-ap", "attacker", "WPS M7", "attack"), event: event("WPS PIN Cracked", "attack", "DE:AD:BE:EF:11:07", "PIN 확정 → PSK 노출", "심각"), packetFields: { "WPS PIN": "1234 5670", "Recovered PSK": "노출됨", "Access": "Full" } },
+        { label: "탐지·대응", kicker: "WPS LOCKED", title: "인증 폭증을 감지해 WPS 를 잠급니다", description: "센서는 동일 출처의 WPS 인증 임계 초과를 근거로 공격을 판정하고 WPS 를 잠그거나 비활성화합니다.", plain: "핀을 마구 시도하는 것을 발견하면 간편 연결 기능을 잠가 더 이상 시도하지 못하게 합니다.", severity: "resolved", rate: 30, alerts: 1, evidence: ["동일 출처 WPS 인증 임계 초과 감지", "WPS 잠금·비활성화 적용", "신규 PIN 시도 차단"], states: { client: "defense", "real-ap": "defense", attacker: "danger", sensor: "defense" }, links: [link("real-ap", "client", "defense", "정상 연결 유지"), link("sensor", "attacker", "defense", "WPS 잠금")], packet: packet("sensor", "attacker", "WPS LOCK", "defense"), event: event("WPS Attack Blocked", "defense", "WFSAT", "WPS 잠금·비활성화 적용", "대응 완료"), packetFields: { "Detection": "WPS Attack", "Blocked Attempts": "4211", "Policy": "WPS Disabled" } }
       ]
     }
   ];
