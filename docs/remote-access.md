@@ -18,4 +18,14 @@
 
 `5500`이 사용 중이면 SSH 명령의 첫 번째 포트와 브라우저 주소를 같은 빈 포트로 바꾼다. SSH 터널이 열려 있어도 페이지가 뜨지 않으면 실습 호스트에서 브리지가 실행 중인지, 명령에 지정한 서버 측 주소와 포트가 일치하는지 확인한다.
 
+## 콘솔에서 저장된 탐지 결과 조회
+
+위 브리지 실행 명령 대신 다음 명령을 사용한다. 외부 기기에서는 같은 SSH 터널과 브라우저 주소를 사용한다.
+
+```bash
+WFSAT_HOST=127.0.0.1 WFSAT_PORT=5000 WFSAT_REPORT_ONLY=1 WFSAT_ENABLE_EXEC=1 python3 bridge.py
+```
+
+실습 탭 콘솔에서 `report`를 입력하면 `WFSAT_DETECT_JSON`에 지정된 탐지 결과의 AP 목록과 탐지 항목이 표시된다. 기본 경로는 `/tmp/et_logs/detect.json`이다. 결과가 없으면 빈 목록을 표시한다. 이 모드는 인자 없는 `report`만 허용하고, 이벤트 입력 및 실행 로그 조회에는 `403`을 반환한다.
+
 [OpenSSH 포트 포워딩 매뉴얼](https://man.openbsd.org/ssh#L) · [콘솔 보안 설정](security.md)

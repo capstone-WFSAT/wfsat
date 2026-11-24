@@ -2,6 +2,8 @@
 
 본인 기기에서 원격 열람할 때는 브리지를 일반 사용자로 실행하고 `WFSAT_ENABLE_EXEC=0`을 설정한다. 브리지 HTTP 포트는 루프백에 유지하고, 접속은 SSH 키 인증을 거친다. [SSH 원격 열람 가이드](remote-access.md)
 
+콘솔에서 저장된 탐지 결과도 조회하려면 `WFSAT_REPORT_ONLY=1`과 `WFSAT_ENABLE_EXEC=1`을 함께 설정한다. 이 모드는 루프백에서만 시작할 수 있으며, `report`는 서버에서 지정한 탐지 파일을 읽어 표시한다.
+
 > 대시보드 명령 콘솔(`/api/exec`)을 root 권한으로 운영할 때의 보안 이슈와 완화 방법 정리.
 > 관련 코드: `bridge.py` (명령 실행), `dashboard_html/` (콘솔 UI)
 
@@ -126,6 +128,7 @@ kali ALL=(root) NOPASSWD: /usr/bin/bash, /usr/bin/python3, /usr/sbin/iw, /usr/sb
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `WFSAT_HOST` | `127.0.0.1` | 브리지 수신 주소 |
+| `WFSAT_REPORT_ONLY` | `0` | `1`이면 루프백 전용 탐지 결과 조회 모드 |
 | `WFSAT_PORT` | `5000` | 포트 |
 | `WFSAT_ENABLE_EXEC` | `1` | `0`이면 명령 콘솔 비활성화 |
 | `WFSAT_SUDO` | `sudo -n` | root 명령 앞에 붙일 sudo. `""`이면 자동 sudo 끔 |

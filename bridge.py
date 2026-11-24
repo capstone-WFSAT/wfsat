@@ -19,6 +19,7 @@
   WFSAT_HOST         기본 127.0.0.1
   WFSAT_PORT         기본 5000
   WFSAT_ENABLE_EXEC  기본 1  (0 으로 두면 /api/exec 비활성화)
+  WFSAT_REPORT_ONLY  기본 0  (1 이면 루프백에서 저장된 탐지 결과만 조회)
   WFSAT_EXEC_TIMEOUT 기본 60 (초, 포그라운드 명령의 최대 대기 시간)
 
 보안 주의:
@@ -73,6 +74,7 @@ PORT = int(os.environ.get("WFSAT_PORT", "5000"))
 EXEC_ENABLED = os.environ.get("WFSAT_ENABLE_EXEC", "1").strip().lower() not in (
     "0", "false", "no", "off", "",
 )
+REPORT_ONLY = os.environ.get("WFSAT_REPORT_ONLY") == "1"
 EXEC_TIMEOUT = int(os.environ.get("WFSAT_EXEC_TIMEOUT", "60"))
 MAX_OUTPUT = 20000  # 응답에 담을 stdout/stderr 최대 길이(문자)
 
@@ -296,6 +298,11 @@ def exec_job_log(job_id, offset):
 def run_command(cmd):
     """화이트리스트 검증 후 명령을 실행하고 결과 dict 를 반환한다."""
     cmd = (cmd or "").strip()
+    if REPORT_ONLY:
+        if cmd != "report":
+            return {"ok": False, "command": cmd, "error": "report 명령만 사용할 수 있습니다."}
+        report = json.dumps(read_detections(), ensure_ascii=False, indent=2)
+        return {"ok": True, "command": cmd, "stdout": _clip_output(report)}
     if not cmd:
         return {"ok": False, "command": cmd, "error": "빈 명령입니다."}
     cmd = _resolve_alias(cmd)  # 별칭(scan/attack/…)을 실제 명령으로 변환
@@ -330,6 +337,13 @@ def run_command(cmd):
 
 def exec_commands_info():
     """콘솔 UI 가 표시할 허용 명령 목록."""
+    if REPORT_ONLY:
+        return {
+            "enabled": EXEC_ENABLED,
+            "report_only": True,
+            "commands": [{"label": "저장된 탐지 결과", "prefix": "report", "alias": "report"}]
+            if EXEC_ENABLED else [],
+        }
     return {
         "enabled": EXEC_ENABLED,
         "timeout": EXEC_TIMEOUT,
@@ -428,6 +442,14 @@ def build_state():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        if REPORT_ONLY and not re.fullmatch(r"127\.0\.0\.1(?::[0-9]+)?", self.headers.get("Host", "")):
+            self._send_json({"error": "허용되지 않은 접속 주소입니다."}, code=403)
+            return False
+        return True
+
     # 기본 요청 로그를 조용히(한 줄 요약만)
     def log_message(self, fmt, *args):
         sys.stderr.write("  %s - %s\n" % (self.address_string(), fmt % args))
@@ -439,11 +461,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         # 같은 origin 에서 서빙하지만, 별도 호스트에서 열 경우를 위해 CORS 허용
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if not REPORT_ONLY:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self):  # CORS preflight
+        if REPORT_ONLY:
+            self._send_json({"error": "허용되지 않은 요청입니다."}, code=403)
+            return
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -456,7 +482,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(exec_commands_info())
             return
         if path == "/api/exec/log":
-            if not EXEC_ENABLED:
+            if REPORT_ONLY or not EXEC_ENABLED:
                 self._send_json({"ok": False, "error": "비활성화됨"}, code=403)
                 return
             from urllib.parse import urlparse, parse_qs
@@ -467,7 +493,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/state":
             try:
-                self._send_json(build_state())
+                if REPORT_ONLY:
+                    state = {"status": "idle", "summary": None, "events": [], "detections": read_detections()}
+                else:
+                    state = build_state()
+                self._send_json(state)
             except Exception as exc:  # 어떤 경우에도 500 대신 빈 상태
                 self._send_json({
                     "status": "idle", "summary": None,
@@ -484,6 +514,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path != "/api/events":
             self._send_json({"error": "unknown endpoint"}, code=404)
+            return
+        if REPORT_ONLY:
+            self._send_json({"error": "탐지 결과 조회 모드에서는 이벤트를 받지 않습니다."}, code=403)
             return
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
@@ -502,14 +535,24 @@ class Handler(BaseHTTPRequestHandler):
                              "error": "명령 실행 기능이 비활성화되어 있습니다. "
                                       "(WFSAT_ENABLE_EXEC=1 로 실행)"}, code=403)
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._send_json({"error": "invalid content length"}, code=400)
+            return
+        if length < 0 or (REPORT_ONLY and length > 1024):
+            self._send_json({"error": "invalid content length"}, code=400)
+            return
         raw = self.rfile.read(length) if length else b""
         try:
             payload = json.loads(raw.decode("utf-8", "replace"))
         except ValueError:
             self._send_json({"ok": False, "error": "invalid json"}, code=400)
             return
-        cmd = (payload or {}).get("command", "")
+        if not isinstance(payload, dict) or not isinstance(payload.get("command"), str):
+            self._send_json({"error": "invalid command"}, code=400)
+            return
+        cmd = payload["command"]
         try:
             result = run_command(cmd)
         except Exception as exc:  # 어떤 실행 오류도 500 대신 JSON 으로
@@ -545,6 +588,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    if REPORT_ONLY and HOST != "127.0.0.1":
+        sys.stderr.write("[!] WFSAT_REPORT_ONLY=1 requires WFSAT_HOST=127.0.0.1\n")
+        return 1
     if not os.path.isdir(STATIC_DIR):
         sys.stderr.write("[!] Static folder not found: %s\n" % STATIC_DIR)
         sys.stderr.write("    Set WFSAT_STATIC_DIR to the dashboard_html path.\n")
@@ -558,7 +604,9 @@ def main():
     print(" Webhook    : POST http://<this host IP>:%d/api/events" % PORT)
     print("              -> set as dashboard_url in et_config.conf")
     print(" State API  : GET  /api/state")
-    if EXEC_ENABLED:
+    if REPORT_ONLY:
+        print(" Exec API   : %s" % ("saved detection report only" if EXEC_ENABLED else "disabled"))
+    elif EXEC_ENABLED:
         print(" Exec API   : POST /api/exec  (whitelist only, %ds timeout)"
               % EXEC_TIMEOUT)
         print("              !! binds %s - anyone reachable can run the "

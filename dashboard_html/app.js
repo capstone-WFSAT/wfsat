@@ -1760,6 +1760,14 @@
 
     function printHelp(forceTrack) {
       clearEmpty();
+      if (commandInfo?.report_only) {
+        const hint = document.createElement("p");
+        hint.className = "exec-log-empty";
+        hint.textContent = "report를 입력하면 저장된 탐지 결과를 조회합니다.";
+        logEl.appendChild(hint);
+        logEl.scrollTop = logEl.scrollHeight;
+        return;
+      }
       const state = readState();
 
       const wrap = document.createElement("div");
@@ -1896,7 +1904,7 @@
       input.disabled = false;
       sendBtn.disabled = false;
       commandInfo = info;
-      input.placeholder = "예: scan   ( help 입력 )";
+      input.placeholder = info.report_only ? "report (저장된 탐지 결과)" : "예: scan   ( help 입력 )";
       renderHint();
     }
 
@@ -1908,12 +1916,14 @@
       helpBtn.type = "button";
       helpBtn.className = "exec-chip exec-chip-help";
       helpBtn.textContent = "help";
-      helpBtn.title = "단계별 명령어와 현재 상황에 맞는 다음 할 일 보기";
+      helpBtn.title = "콘솔에서 사용할 수 있는 명령 보기";
       helpBtn.addEventListener("click", () => printHelp());
       chips.appendChild(helpBtn);
       const hint = document.createElement("span");
       hint.className = "exec-hint";
-      hint.textContent = "help 를 입력하면 단계별 명령어와 다음 할 일을 알려줍니다.";
+      hint.textContent = commandInfo?.report_only
+        ? "report를 입력하면 저장된 탐지 결과를 조회합니다."
+        : "help 를 입력하면 단계별 명령어와 다음 할 일을 알려줍니다.";
       chips.appendChild(hint);
     }
 
