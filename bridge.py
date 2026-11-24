@@ -307,7 +307,9 @@ def run_command(cmd):
     if REPORT_ONLY:
         if cmd != "report":
             return {"ok": False, "command": cmd, "error": "report 명령만 사용할 수 있습니다."}
-        report = json.dumps(read_detections(), ensure_ascii=False, indent=2)
+        report = read_detections()
+        report.pop("beacon_timeline", None)
+        report = json.dumps(report, ensure_ascii=False, indent=2)
         return {"ok": True, "command": cmd, "stdout": _clip_output(report)}
     if not cmd:
         return {"ok": False, "command": cmd, "error": "빈 명령입니다."}
@@ -394,6 +396,7 @@ def read_detections():
     return {
         "ap_table": data.get("ap_table") or [],
         "findings": data.get("findings") or [],
+        "beacon_timeline": data.get("beacon_timeline"),
     }
 
 

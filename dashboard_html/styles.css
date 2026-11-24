@@ -2927,6 +2927,28 @@ footer button {
 }
 .live-detect-table th { color: var(--muted); font-size: 0.76rem; font-weight: 600; }
 .live-detect-table td.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+
+.beacon-panel { grid-column: 1 / -1; min-width: 0; }
+.beacon-bars {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding: 6px;
+}
+.beacon-bars button {
+  display: flex;
+  align-items: flex-end;
+  flex: 1 0 18px;
+  min-width: 18px;
+  height: 76px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.beacon-bars button[aria-pressed="true"] { border-color: var(--cyan); }
+.beacon-bars button span { width: 100%; background: var(--cyan); pointer-events: none; }
 .detect-verdict {
   display: inline-block;
   padding: 2px 10px;

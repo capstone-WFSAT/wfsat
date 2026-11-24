@@ -354,7 +354,7 @@
             <div class="panel-heading compact">
               <div>
                 <p class="section-kicker">C · DETECTION</p>
-                <h3 id="liveDetectHeading">Evil Twin 탐지 결과</h3>
+                <h3 id="liveDetectHeading">PCAP 탐지 결과</h3>
               </div>
               <span id="liveDetectMeta" class="live-count">—</span>
             </div>
@@ -364,6 +364,22 @@
                 <thead><tr><th scope="col">판정</th><th scope="col">SSID</th><th scope="col">의심 BSSID</th><th scope="col">CH</th><th scope="col">암호화</th><th scope="col">점수</th><th scope="col">신호</th></tr></thead>
                 <tbody id="liveDetectBody"></tbody>
               </table>
+            </div>
+          </article>
+          <article class="panel beacon-panel" aria-labelledby="beaconHeading">
+            <h3 id="beaconHeading">Beacon Flood 패킷 분석</h3>
+            <p id="beaconEmpty" class="live-empty">시간대별 결과가 없습니다. 저장된 PCAP을 다시 분석하면 Beacon이 포함된 구간을 볼 수 있습니다.</p>
+            <div id="beaconTimeline" hidden>
+              <p>막대의 높이는 1초 동안 캡처된 Beacon 수입니다. 구간을 선택하면 프레임을 확인할 수 있습니다.</p>
+              <div id="beaconBars" class="beacon-bars" role="group" aria-label="초별 Beacon 수"></div>
+              <p id="beaconRange" aria-live="polite"></p>
+              <p id="beaconOutside" class="live-empty" hidden></p>
+              <div class="table-scroll" tabindex="0" aria-label="선택한 구간의 Beacon 프레임">
+                <table class="live-detect-table">
+                  <thead><tr><th scope="col">시각 (UTC)</th><th scope="col">SSID</th><th scope="col">송신 주소</th><th scope="col">BSSID</th><th scope="col">채널</th></tr></thead>
+                  <tbody id="beaconFrames"></tbody>
+                </table>
+              </div>
             </div>
           </article>
         </section>

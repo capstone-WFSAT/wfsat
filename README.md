@@ -204,15 +204,17 @@ sudo WPS_BSSID=AA:BB:CC:11:22:33 WPS_CHANNEL=6 bash wps/et_wps_attack.sh
 
 ## 4. 탐지 분석 — detector/et_detector.py
 
-저장된 pcap을 오프라인으로 분석해 **Evil Twin**과 **Beacon Flood**를 탐지하고, 대시보드 실습 모드의 **"탐지 결과" 표**에 채워 넣는 JSON을 만든다.
+저장된 PCAP을 오프라인으로 분석해 **Evil Twin**과 **Beacon Flood**를 탐지하고, 대시보드의 탐지 표와 Beacon 타임라인에 표시할 JSON을 만든다.
 
 ```bash
-pip install -r detector/requirements.txt
+pip install -r requirements.txt
 python3 detector/et_detector.py capture.pcap                                  # 리포트만
 python3 detector/et_detector.py capture.pcap --json /tmp/et_logs/detect.json  # + 대시보드 연동
 ```
-- `--json <경로>` — `ap_table` + `findings` 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 같은 경로면 대시보드가 자동으로 읽는다.
+- `--json <경로>` — AP 목록, 탐지 항목, Beacon 타임라인 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 같은 경로면 대시보드가 자동으로 읽는다.
 - `--quiet` — 리포트 없이 JSON만.
+
+실습 탭의 **Beacon Flood 패킷 분석**에서 1초 단위 막대를 선택하면 시각(UTC), SSID, 송신 주소, BSSID, 채널을 볼 수 있다. 캡처 파일에서 처음 읽은 Beacon을 기준으로 최대 120초를 집계하고, 각 구간의 상세 표에는 처음 24개 프레임을 표시한다. 기존 JSON에 타임라인이 없으면 원본 PCAP을 다시 분석한다. [탐지 결과 형식](detector/detector.md)
 
 **탐지 신호**
 - **S1** ESSID 내 zero-width 문자 (가중치 0.45) — Evil Twin

@@ -235,7 +235,11 @@ def nibble_distance(mac_a: str, mac_b: str) -> int:
 # 1단계: pcap 파싱 → AP 인벤토리 구축
 # ------------------------------------------------------------
 
-def parse_pcap(path: str) -> dict:
+BEACON_WINDOW_SECONDS = 120
+BEACON_FRAMES_PER_SECOND = 24
+
+
+def parse_pcap(path: str, beacon_timeline: dict | None = None) -> dict:
     """pcap 을 스트리밍으로 읽어 BSSID 별 AccessPoint 를 구성."""
     aps: dict[str, AccessPoint] = {}
 
@@ -264,8 +268,13 @@ def parse_pcap(path: str) -> dict:
                 ap.ssid = ssid_raw.decode("utf-8", errors="replace")
                 ap.ssid_norm = normalize_ssid(ap.ssid)
 
+            is_beacon = beacon_timeline is not None and pkt.haslayer(Dot11Beacon)
+            channel = extract_channel(pkt) if ap.channel is None or is_beacon else ap.channel
             if ap.channel is None:
-                ap.channel = extract_channel(pkt)
+                ap.channel = channel
+
+            if is_beacon:
+                record_beacon(beacon_timeline, pkt, bssid, ssid_raw, channel)
 
             enc = detect_encryption(pkt)
             # 암호화가 확정(비 UNKNOWN)이면 갱신. OPEN 오탐을 줄이려 한 번이라도
@@ -278,6 +287,29 @@ def parse_pcap(path: str) -> dict:
                 ap.rssi = rssi
 
     return aps
+
+
+def record_beacon(timeline, pkt, bssid, ssid_raw, channel):
+    timestamp_ms = int(pkt.time * 1000)
+    start_ms = timeline.setdefault("start_ms", timestamp_ms)
+    second = (timestamp_ms - start_ms) // 1000
+    if not 0 <= second < BEACON_WINDOW_SECONDS:
+        timeline["outside_window"] += 1
+        return
+
+    bins = timeline["bins"]
+    while len(bins) <= second:
+        bins.append({"count": 0, "frames": []})
+    bucket = bins[second]
+    bucket["count"] += 1
+    if len(bucket["frames"]) < BEACON_FRAMES_PER_SECOND:
+        bucket["frames"].append({
+            "timestamp_ms": timestamp_ms,
+            "ssid": ssid_raw.decode("utf-8", errors="replace"),
+            "source": pkt[Dot11].addr2,
+            "bssid": bssid,
+            "channel": channel,
+        })
 
 
 # ------------------------------------------------------------
@@ -504,7 +536,7 @@ def main() -> int:
     )
     parser.add_argument("pcap", help="path to pcap/pcapng file to analyze")
     parser.add_argument("--json", metavar="PATH",
-                        help="save results (JSON: ap_table + findings) to this path")
+                        help="save AP, detection and Beacon timeline results as JSON")
     parser.add_argument("--quiet", action="store_true",
                         help="suppress stdout report (save JSON only)")
     args = parser.parse_args()
@@ -513,7 +545,8 @@ def main() -> int:
         sys.stderr.write(f"[!] file not found: {args.pcap}\n")
         return 1
 
-    aps = parse_pcap(args.pcap)
+    beacon_timeline = {"bins": [], "outside_window": 0} if args.json else None
+    aps = parse_pcap(args.pcap, beacon_timeline)
     apply_signals(aps)
     score_aps(aps)
     # beacon flood 는 score_aps 뒤에 판정(멤버 상태/점수를 덮어써야 하므로).
@@ -531,7 +564,7 @@ def main() -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as fh:
             json.dump(
-                {"ap_table": rows, "findings": findings},
+                {"ap_table": rows, "findings": findings, "beacon_timeline": beacon_timeline},
                 fh, ensure_ascii=False, indent=2,
             )
         if not args.quiet:

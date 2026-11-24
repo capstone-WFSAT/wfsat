@@ -28,4 +28,6 @@ WFSAT_HOST=127.0.0.1 WFSAT_PORT=5000 WFSAT_REPORT_ONLY=1 WFSAT_ENABLE_EXEC=1 pyt
 
 실습 탭 콘솔에서 `report`를 입력하면 `WFSAT_DETECT_JSON`에 지정된 탐지 결과의 AP 목록과 탐지 항목이 표시된다. 기본 경로는 `/tmp/et_logs/detect.json`이다. 결과가 없으면 빈 목록을 표시한다. 이 모드는 인자 없는 `report`만 허용하고, 이벤트 입력 및 실행 로그 조회에는 `403`을 반환한다.
 
+탐지 결과에 Beacon 타임라인이 포함되어 있으면 같은 실습 탭의 **Beacon Flood 패킷 분석**에서 초별 프레임을 열람할 수 있다.
+
 [OpenSSH 포트 포워딩 매뉴얼](https://man.openbsd.org/ssh#L) · [콘솔 보안 설정](security.md)

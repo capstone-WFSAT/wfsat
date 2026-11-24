@@ -1126,6 +1126,53 @@
       }).join("");
     }
 
+    const beaconTimeline = $("beaconTimeline");
+    const beaconBars = $("beaconBars");
+    let previousBeaconTimeline = "";
+
+    function renderBeaconTimeline(timeline) {
+      if (!beaconTimeline) return;
+      const bins = Array.isArray(timeline?.bins) ? timeline.bins : [];
+      const signature = JSON.stringify(timeline ?? null);
+      if (signature === previousBeaconTimeline) return;
+      previousBeaconTimeline = signature;
+      beaconTimeline.hidden = !bins.length;
+      $("beaconEmpty").hidden = !!bins.length;
+      if (!bins.length) return;
+
+      const peak = Math.max(...bins.map(({ count }) => count), 1);
+      const outside = $("beaconOutside");
+      outside.hidden = !timeline.outside_window;
+      outside.textContent = `표시 범위 밖 Beacon ${timeline.outside_window}개`;
+      beaconBars.innerHTML = bins.map(({ count }, index) => {
+        const label = `${index}–${index + 1}초 · Beacon ${count}개`;
+        return `<button type="button" aria-pressed="false" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+          <span style="height: ${count / peak * 100}%"></span></button>`;
+      }).join("");
+
+      function selectBin(index) {
+        const { count, frames } = bins[index];
+        const start = new Date(timeline.start_ms + index * 1000).toISOString();
+        for (const [i, button] of Array.from(beaconBars.children).entries()) {
+          button.setAttribute("aria-pressed", String(i === index));
+        }
+        const shown = count > frames.length ? ` · 처음 ${frames.length}개 표시` : "";
+        $("beaconRange").textContent = `${index}–${index + 1}초 (${start}) · Beacon ${count}개${shown}`;
+        $("beaconFrames").innerHTML = frames.map((frame) => `<tr>
+          <td>${escapeHtml(new Date(frame.timestamp_ms).toISOString())}</td>
+          <td>${escapeHtml(frame.ssid || "숨김")}</td>
+          <td class="mono">${escapeHtml(frame.source ?? "—")}</td>
+          <td class="mono">${escapeHtml(frame.bssid)}</td>
+          <td>${escapeHtml(frame.channel ?? "—")}</td>
+        </tr>`).join("") || '<tr><td colspan="5">이 구간에 캡처된 Beacon이 없습니다.</td></tr>';
+      }
+
+      for (const [index, button] of Array.from(beaconBars.children).entries()) {
+        button.addEventListener("click", () => selectBin(index));
+      }
+      selectBin(0);
+    }
+
     // 실제 상태로부터 토폴로지 장면을 구성한다.
     // 기본은 정상(클라이언트+진짜 AP)이며, Evil Twin 이 탐지되거나 공격이
     // 진행 중이면 학습 3단계처럼 공격자 노드와 공격 링크가 나타난다.
@@ -1221,6 +1268,7 @@
       renderStatus(data && data.summary ? data.summary : null);
       renderEvents(data ? data.events : []);
       renderDetections(data ? data.detections : null);
+      renderBeaconTimeline(data?.detections?.beacon_timeline);
       live.updated.textContent = new Date().toLocaleTimeString();
     }
 

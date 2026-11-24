@@ -27,7 +27,13 @@
 - `score ≥ 0.3` → **의심**
 - 그 외 → **정상**
 
-(S4 deauth flood, S5 중복 ESSID, S6 클라이언트 IP 프로파일은 후속 단계에서 확장.)
+S4는 숫자 접미사를 가진 유사 SSID가 여러 BSSID에 나타나는 Beacon Flood 패턴을 탐지한다.
+
+## Beacon 타임라인
+
+`--json` 결과의 `beacon_timeline`에는 `start_ms`(첫 Beacon의 Unix 시각, 밀리초), `bins`(1초 구간 목록), `outside_window`(표시 범위를 벗어난 Beacon 수)가 담긴다. 집계와 상세 표에는 Beacon 프레임만 포함한다. 각 구간의 `count`는 캡처된 Beacon 전체 수이며 `frames`는 캡처 순서상 처음 24개다. 구간의 최대 표시 범위는 첫 Beacon부터 120초다. Beacon이 없으면 `bins`가 비어 있다.
+
+막대 높이는 캡처에서 관찰한 Beacon 수다. S4 판정은 기존 SSID·BSSID 패턴 기준을 사용한다.
 
 ## 설치
 
