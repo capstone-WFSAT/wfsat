@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # et_stop.sh - 실행 중인 공격을 중지한다.
-#   기본: beacon flood + sniffing attack 중지 (각 스크립트의 정리 트랩이
-#         인터페이스/방화벽/설정을 자동 복구).
+#   기본: 지원하는 실습 스크립트에 종료 신호를 보내 정리 절차를 시작한다.
 #   인자 "all": 실습용 피해 AP(lab_victim_ap.sh)까지 함께 중지.
 #
 # 사용 예:
@@ -31,6 +30,9 @@ _term_script() {
 
 _term_script "et_beacon_flood.sh" "Beacon Flood"
 _term_script "et_sniffing_attack.sh" "Evil Twin 스니핑 공격"
+_term_script "et_karma_attack.sh" "KARMA 공격"
+_term_script "et_arp_spoof.sh" "ARP 스푸핑"
+_term_script "et_wps_attack.sh" "WPS 공격"
 if [ "${_mode}" = "all" ]; then
 	_term_script "lab_victim_ap.sh" "실습용 피해 AP"
 fi
