@@ -1304,16 +1304,20 @@
     function apply(collapsed) {
       shell.classList.toggle("sidebar-collapsed", collapsed);
       toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+      toggleBtn.setAttribute("aria-label", collapsed ? "공격 라이브러리 펼치기" : "공격 라이브러리 접기");
+      toggleBtn.title = collapsed ? "펼치기" : "접기";
       expandBtn.setAttribute("aria-expanded", String(!collapsed));
       try { localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0"); } catch (e) {}
     }
 
     function isCollapsed() { return shell.classList.contains("sidebar-collapsed"); }
 
+    // 레일에서도 토글 버튼이 보이므로 양방향 토글(접기 ↔ 펼치기)로 동작시킨다.
     toggleBtn.addEventListener("click", () => {
-      apply(true);
-      expandBtn.focus();
+      apply(!isCollapsed());
+      if (expandBtn.getClientRects().length) expandBtn.focus();
     });
+    // 모바일 접힘 상태에서 사이드바가 숨겨졌을 때 다시 펼치는 플로팅 버튼.
     expandBtn.addEventListener("click", () => {
       apply(false);
       toggleBtn.focus();

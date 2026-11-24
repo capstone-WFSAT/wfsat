@@ -115,19 +115,20 @@ summary:focus-visible,
 }
 
 /* ── 사이드바 접기/펼치기 ─────────────────────────────────── */
+/* 토글 버튼: 옆의 브랜드 마크(W, 42px)와 같은 크기/정렬. 접힌 상태에서도 동일 크기 유지. */
 .sidebar-toggle {
   margin-left: auto;
-  align-self: flex-start;
+  align-self: center;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 12px;
   background: rgba(12, 30, 48, 0.7);
   color: var(--muted);
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
@@ -135,21 +136,22 @@ summary:focus-visible,
 .sidebar-toggle:hover,
 .sidebar-toggle:focus-visible { border-color: var(--cyan); color: var(--cyan); background: rgba(12, 40, 60, 0.9); }
 
+/* 별도 플로팅 확장 버튼: 데스크톱에선 안 씀(레일의 토글이 담당). 모바일 접힘 때만 표시(아래 미디어쿼리). */
 .sidebar-expand {
   position: fixed;
-  top: 16px;
-  left: 14px;
+  top: 12px;
+  left: 12px;
   z-index: 40;
   display: none;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 12px;
   background: rgba(8, 24, 40, 0.94);
   backdrop-filter: blur(12px);
   color: var(--cyan);
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   box-shadow: var(--shadow);
@@ -158,15 +160,60 @@ summary:focus-visible,
 .sidebar-expand:hover,
 .sidebar-expand:focus-visible { border-color: var(--cyan); background: rgba(12, 40, 60, 0.96); }
 
-/* 접힌 상태 */
-.app-shell.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+/* ── 접힌 상태 = 아이콘 전용 슬림 레일 ───────────────────────────────
+   사이드바를 숨기지 않고 64px 레일로 좁혀 공격 아이콘을 세로로 남긴다.
+   본문은 레일 폭만큼 밀리고(겹치지 않음), 아이콘은 그대로 클릭/선택 가능하며
+   현재 선택된 공격은 열렸을 때와 동일한 하이라이트로 표시된다. */
+.app-shell.sidebar-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
 .app-shell.sidebar-collapsed .sidebar {
-  transform: translateX(-100%);
-  opacity: 0;
-  pointer-events: none;
-  border-right-color: transparent;
+  padding: 18px 10px 16px;
+  overflow-x: hidden;
 }
-.app-shell.sidebar-collapsed .sidebar-expand { display: grid; }
+/* 상단: 토글 버튼만 가운데. W 로고/텍스트는 접을 때 숨김 */
+.app-shell.sidebar-collapsed .brand {
+  justify-content: center;
+  gap: 0;
+  padding: 0 0 14px;
+}
+/* W 로고와 텍스트 묶음(.brand 직속 div)만 숨긴다. 토글 버튼의 ☰ span 은 건드리지 않음 */
+.app-shell.sidebar-collapsed .brand > div { display: none; }
+/* 토글 버튼: 접힘 때는 아래 공격 아이콘과 같은 크기로 맞춘다 */
+.app-shell.sidebar-collapsed .sidebar-toggle {
+  margin: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  font-size: 17px;
+}
+/* 텍스트성 요소 숨김 */
+.app-shell.sidebar-collapsed .nav-heading,
+.app-shell.sidebar-collapsed .simulation-notice,
+.app-shell.sidebar-collapsed .sidebar-guide { display: none; }
+/* 공격 목록: 아이콘만 세로로, 선택 하이라이트는 유지 */
+.app-shell.sidebar-collapsed .scenario-list { justify-items: center; gap: 6px; }
+.app-shell.sidebar-collapsed .scenario-button {
+  grid-template-columns: auto;
+  justify-items: center;
+  gap: 0;
+  width: 100%;          /* 레일 콘텐츠 폭을 꽉 채워 아이콘이 좌우 정중앙에 오게 */
+  min-height: 46px;
+  padding: 4px 0;       /* 좌우 패딩 0 → 가로 중심 흔들림 방지 */
+}
+.app-shell.sidebar-collapsed .scenario-button:hover { transform: none; }
+.app-shell.sidebar-collapsed .scenario-name,
+.app-shell.sidebar-collapsed .scenario-arrow { display: none; }
+.app-shell.sidebar-collapsed .scenario-icon { width: 38px; height: 38px; font-size: 17px; }
+/* 선택 표시: 바깥 버튼 박스/세로 바를 또 씌우지 않고, 아이콘 배경색만 바꾼다 */
+.app-shell.sidebar-collapsed .scenario-button[aria-current="true"] {
+  border-color: transparent;
+  background: transparent;
+}
+.app-shell.sidebar-collapsed .scenario-button[aria-current="true"]::before { display: none; }
+.app-shell.sidebar-collapsed .scenario-button[aria-current="true"] .scenario-icon {
+  border-color: rgba(52, 200, 255, 0.45);
+  background: rgba(52, 200, 255, 0.22);
+  color: var(--cyan);
+}
 
 .brand {
   display: flex;
@@ -2537,7 +2584,10 @@ footer button {
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
-  .app-shell.sidebar-collapsed .sidebar { display: none; transform: none; }
+  /* 모바일은 블록 레이아웃이라 아이콘 레일이 성립하지 않는다 → 접으면 완전히 숨기고
+     작은 플로팅 버튼으로 다시 펼친다. (접힘 때의 레일 스타일 무효화) */
+  .app-shell.sidebar-collapsed .sidebar { display: none; padding: 16px; overflow-x: visible; }
+  .app-shell.sidebar-collapsed .sidebar-expand { display: grid; }
   .brand { padding-bottom: 13px; }
   .simulation-notice { position: absolute; top: 18px; right: 16px; width: 220px; margin: 0; }
   .nav-heading { margin-top: 2px; }
