@@ -38,7 +38,7 @@ if [ "${_mode}" = "all" ]; then
 fi
 
 # 트랩이 놓칠 수 있는 공격 도구를 직접 정리
-for _t in mdk4 mdk3; do
+for _t in mdk4 mdk3 airbase-ng arpspoof reaver; do
 	if pgrep -x "${_t}" > /dev/null 2>&1; then
 		pkill -TERM -x "${_t}" 2>/dev/null
 		echo "[*] ${_t} 종료"

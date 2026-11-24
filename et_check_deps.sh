@@ -24,12 +24,19 @@ DEPS=(
 	"airodump-ng|aircrack-ng|1.6|airodump-ng --help|[0-9]+\.[0-9]+(\.[0-9]+)?"
 	"aireplay-ng|aircrack-ng|1.6|aireplay-ng --help|[0-9]+\.[0-9]+(\.[0-9]+)?"
 	"airmon-ng|aircrack-ng|||"
+	"airbase-ng|aircrack-ng|||"
 	# --- 인터페이스/무선 제어 ---
 	"iw|iw|5.4|iw --version|[0-9]+\.[0-9]+"
 	"ip|iproute2|||"
 	# --- Fake AP / DHCP ---
 	"hostapd|hostapd|2.9|hostapd -v|[0-9]+\.[0-9]+"
 	"dnsmasq|dnsmasq|2.79|dnsmasq --version|[0-9]+\.[0-9]+"
+	# --- ARP 스푸핑(MITM) ---
+	"arpspoof|dsniff|||"
+	# --- WPS 공격 ---
+	"reaver|reaver|||"
+	"wash|reaver|||"
+	"pixiewps|pixiewps|||"
 	# --- Deauth / 스니핑 ---
 	"mdk4|mdk4|4.0|mdk4 --help|[0-9]+\.[0-9]+"
 	"ettercap|ettercap-graphical|0.8.3|ettercap -v|[0-9]+\.[0-9]+(\.[0-9]+)?(\.[0-9]+)?"

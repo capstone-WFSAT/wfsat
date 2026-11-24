@@ -64,6 +64,9 @@ sudo python3 bridge.py     # 127.0.0.1:5000, dashboard_html/ 도 함께 서빙
   | `ap` | `bash evil_twin/lab_victim_ap.sh` | 공격 | 실습용 피해 AP 생성 + 대상 자동 등록 |
   | `attack` | `bash evil_twin/et_sniffing_attack.sh` | 공격 | Evil Twin(가짜 AP+deauth+스니퍼) |
   | `beacon` | `bash beacon_flood/et_beacon_flood.sh` | 공격 | Beacon Flood(가짜 SSID 대량 송출) |
+  | `karma` | `bash karma/et_karma_attack.sh` | 공격 | KARMA(모든 probe 에 응답하는 가짜 AP → 자동 연결 유도) |
+  | `arp` | `bash arp_spoofing/et_arp_spoof.sh` | 공격 | ARP 스푸핑(피해자↔게이트웨이 MITM) |
+  | `wps` | `bash wps/et_wps_attack.sh` | 공격 | WPS PIN 공격(reaver pixie-dust) → PSK 획득 |
   | `capture` | `bash beacon_flood/et_capture.sh` | 탐지 | 관리 프레임 pcap 캡처 |
   | `detect` | `python3 detector/et_detector.py` | 탐지 | pcap 분석 → Evil Twin·Beacon Flood 탐지 |
   | `stop` | `bash et_stop.sh` | 조회 | 실행 중인 공격 중지 (`stop all`=피해 AP까지) |
@@ -158,7 +161,44 @@ sudo BF_BASE="Cafe_" BF_COUNT=50 BF_PPS=1000 BF_CHANNEL=6 bash beacon_flood/et_b
 - 탐지는 **같은 base 이름의 숫자형 SSID가 서로 다른 BSSID 8개 이상**이면 Beacon Flood로 판정(신호 **S4**).
 - 어댑터가 2개뿐(피해 AP + flood)이면 캡처할 여유가 없다 → flood를 잠깐 `stop` 하고 캡처하거나, 캡처용 어댑터를 따로 둔다.
 
-> 학습 탭에는 이 두 공격 외에도 목업 시나리오(Auth DoS, WIDS 혼란, KARMA, ARP 스푸핑, Handshake 등)가 있으나, **실제 실행 스크립트가 있는 건 Evil Twin과 Beacon Flood** 두 가지다.
+### KARMA 공격 — `karma/et_karma_attack.sh`
+
+클라이언트가 자동 연결을 위해 과거 접속 네트워크(PNL)를 directed probe 로 계속 묻는 점을 악용한다. `airbase-ng -P` 로 **어떤 SSID 를 물어봐도 "여기 있다"고 응답**하는 가짜 AP(`at0`)를 띄워 자동 연결 기기를 끌어들이고, dnsmasq(DHCP)+선택적 NAT 로 실제 연결까지 재현한다.
+
+```bash
+sudo bash karma/et_karma_attack.sh
+# 옵션(env):
+sudo KARMA_ESSID="Cafe_Free" KARMA_CHANNEL=6 bash karma/et_karma_attack.sh
+sudo KARMA_NAT=0 bash karma/et_karma_attack.sh          # 인터넷 공유 끄기
+sudo interface=wlan1 bash karma/et_karma_attack.sh      # 공격 어댑터 지정
+```
+- 클라이언트 연결은 다른 공격과 동일하게 실습 탭의 **상태/이벤트 카드**(attack_start · client_connected · 클라이언트 수 · attack_stop)에 채워진다.
+- 종료는 Ctrl+C 또는 `stop`. 자세한 옵션은 [`karma/README.md`](karma/README.md).
+
+### ARP 스푸핑 공격 — `arp_spoofing/et_arp_spoof.sh`
+
+LAN 에서 피해자에게 "게이트웨이 = 내 MAC", 게이트웨이에 "피해자 = 내 MAC" 이라고 위조 ARP 를 주입해 둘 사이 트래픽을 공격자로 끌어오는 **중간자(MITM)** 공격. `ip_forward` 로 트래픽을 중계하므로 피해자는 인터넷이 그대로 되는 것처럼 보인다.
+
+```bash
+sudo ARP_TARGET=192.168.10.24 bash arp_spoofing/et_arp_spoof.sh
+# 전부 지정:
+sudo ARP_TARGET=192.168.10.24 ARP_GATEWAY=192.168.10.1 ARP_IFACE=eth0 bash arp_spoofing/et_arp_spoof.sh
+```
+- `ARP_TARGET`(피해자 IP)만 필수. 게이트웨이/인터페이스는 기본 라우트에서 자동 감지.
+- 종료(Ctrl+C) 시 arpspoof 가 정상 ARP 를 재전송해 ARP 테이블을 복구. 자세히는 [`arp_spoofing/README.md`](arp_spoofing/README.md).
+
+### WPS 공격 — `wps/et_wps_attack.sh`
+
+WPS PIN(8자리)의 설계 약점을 공격해 WPA/WPA2 비밀번호(PSK)를 얻는다. 기본은 **pixie-dust**(오프라인, 빠름), `WPS_PIXIE=0` 이면 온라인 PIN brute.
+
+```bash
+sudo bash wps/et_wps_attack.sh                                   # 대상 미지정 → WPS AP 스캔(wash)
+sudo WPS_BSSID=AA:BB:CC:11:22:33 WPS_CHANNEL=6 bash wps/et_wps_attack.sh
+```
+- `WPS_BSSID` 가 없으면 `wash` 로 WPS 활성 AP 를 스캔해 보여주고 종료 → 대상 골라 재실행.
+- PIN/PSK 를 찾으면 `credential_captured` 이벤트로 기록 → 실습 탭 **자격증명 수**에 반영. 자세히는 [`wps/README.md`](wps/README.md).
+
+> 학습 탭에는 이 공격들 외에도 목업 시나리오(Auth DoS, WIDS 혼란, Handshake 등)가 있으나, **실제 실행 스크립트가 있는 건 Evil Twin · Beacon Flood · KARMA · ARP 스푸핑 · WPS** 다섯 가지다.
 
 ---
 
@@ -203,6 +243,15 @@ wfsat/
 ├─ beacon_flood/
 │  ├─ et_beacon_flood.sh   # Beacon Flood 공격            (beacon)
 │  └─ et_capture.sh        # 관리 프레임 pcap 캡처         (capture)
+├─ karma/
+│  ├─ et_karma_attack.sh   # KARMA 공격(airbase-ng -P)    (karma)
+│  └─ README.md            # KARMA 공격 설명
+├─ arp_spoofing/
+│  ├─ et_arp_spoof.sh      # ARP 스푸핑 MITM(arpspoof)    (arp)
+│  └─ README.md            # ARP 스푸핑 설명
+├─ wps/
+│  ├─ et_wps_attack.sh     # WPS PIN 공격(reaver)         (wps)
+│  └─ README.md            # WPS 공격 설명
 ├─ detector/
 │  └─ et_detector.py       # Evil Twin·Beacon Flood 오프라인 pcap 탐지기 (detect)
 ├─ dashboard_html/         # 학습/실습 대시보드 (정적: index.html·app.js·…)
