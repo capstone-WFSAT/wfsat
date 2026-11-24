@@ -46,7 +46,7 @@ bash et_check_deps.sh --check-only  # 설치 없이 점검만 (root 불필요)
 ### 브리지 실행
 ```bash
 # 프로젝트 루트에서 실행 (명령 경로가 루트 기준이라 위치가 중요)
-sudo python3 bridge.py     # 0.0.0.0:5000, dashboard_html/ 도 함께 서빙
+sudo python3 bridge.py     # 127.0.0.1:5000, dashboard_html/ 도 함께 서빙
 ```
 - 공격이 `log_dir`(기본 `/tmp/et_logs`)에 남긴 로그를 직접 읽으므로 **공격과 같은 Kali에서 실행**한다.
 - 접속: `http://<Kali IP>:5000/` → 우측 상단 **"실습"** 토글.
@@ -77,7 +77,7 @@ sudo python3 bridge.py     # 0.0.0.0:5000, dashboard_html/ 도 함께 서빙
 - **root 자동 처리**: root가 필요한 명령은 서버가 자동으로 `sudo -n`을 붙인다(브리지를 root로 실행 중이면 그대로). → 콘솔에서 `sudo`를 칠 필요 없음. (NOPASSWD sudoers 또는 root로 브리지 실행 필요 — [docs/security.md](docs/security.md) 참고)
 - 오래 도는 명령(`ap`/`attack`/`beacon`/`capture`)은 **백그라운드**로 돌고 로그가 콘솔에 실시간 스트리밍된다. 로그는 `<log_dir>/job_*.log`에도 저장.
 
-> ⚠️ **보안** — 콘솔(`/api/exec`)은 인증이 없고 브리지는 기본 `0.0.0.0` 바인딩이다. **격리된 실습 랜에서만** 쓰고, 필요하면 `WFSAT_HOST=127.0.0.1`(로컬 전용) / `WFSAT_ENABLE_EXEC=0`(콘솔 끔)으로 잠근다. 자세한 위험/완화는 [docs/security.md](docs/security.md).
+브리지는 기본적으로 `127.0.0.1`에서 수신한다. 콘솔 API에 자체 인증이 없으므로 외부 인터페이스에서 열람을 제공하려면 `WFSAT_ENABLE_EXEC=0`으로 실행 API를 끈다. [콘솔 보안 설정](docs/security.md)
 
 ---
 
@@ -242,31 +242,19 @@ wfsat/
 - 공격 실행 시 WiFi 관리 경로가 끊길 수 있으니 대시보드는 **유선(eth0)** 으로 접속하는 게 안정적.
 
 **외부(다른 기기/LAN)에서 접속이 안 된다**
-- `sudo ss -tlnp | grep :5000`이 `0.0.0.0:5000`인지 확인. 방화벽이면 `sudo ufw allow 5000/tcp`. VM이 NAT 뒤면 [7. 원격 접속](#7-원격외부-접속)의 터널 사용.
+- 브리지가 `127.0.0.1:5000`에서 수신 중인지 확인하고 [원격 접속](#7-원격외부-접속) 절차를 사용한다.
 
 ---
 
 ## 7. 원격/외부 접속
 
-서버(Kali)를 두고 **다른 네트워크의 노트북**에서 대시보드를 볼 때. VM은 대개 NAT 뒤라 **밖으로 나가는 터널**이 가장 쉽다.
-
-| 방법 | 공개 URL | 인증 | 비고 |
-|---|---|---|---|
-| **Tailscale** (권장) | 없음(사설) | 계정 로그인 | 내 기기끼리만 통하는 VPN, localhost처럼 사용 |
-| ngrok | 있음 | `--basic-auth` 가능 | authtoken 1회 등록 |
-| cloudflared 즉석 터널 | 있음 | **없음** | 공개 노출 주의 |
+본인 기기에서 SSH 키로 인증한 뒤 SSH 로컬 포트 포워딩으로 대시보드에 접속한다. 브리지는 127.0.0.1에서 수신하고, 브리지 포트는 외부에 개방하지 않는다. 원격 열람용 브리지는 일반 사용자로 실행한다.
 
 ```bash
-# Tailscale (양쪽 설치)
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-tailscale ip -4            # 서버 100.x.x.x → 노트북에서 http://<그 IP>:5000/
+WFSAT_ENABLE_EXEC=0 python3 bridge.py
 ```
 
-> 🔐 **원격 노출 시** — 콘솔(`/api/exec`)은 인증이 없다. 무인증 공개 URL로 열면 URL을 아는 누구나 서버에서 공격 명령을 실행할 수 있다.
-> - **화면만 보여줄 때** → `WFSAT_HOST=127.0.0.1 WFSAT_ENABLE_EXEC=0 python3 bridge.py`
-> - **원격 조작이 필요할 때** → Tailscale(사설) 또는 인증 붙은 터널(ngrok `--basic-auth`, Cloudflare Access)
-> - 자세한 보안 논의: [docs/security.md](docs/security.md)
+SSH 터널은 접속하는 기기의 터미널에서 열고, 같은 기기의 브라우저에서 터널의 로컬 포트로 접속한다. [콘솔 보안 설정](docs/security.md)
 
 ---
 

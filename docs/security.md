@@ -56,7 +56,7 @@ kali ALL=(root) NOPASSWD: /usr/bin/bash, /usr/bin/python3, /usr/sbin/iw, /usr/sb
 
 1. **인증 없는 `/api/exec` + root = 사실상 원격 root** *(가장 치명적)*
    - `_handle_exec`에 인증·토큰·세션이 전혀 없음.
-   - 기본 바인딩 `WFSAT_HOST=0.0.0.0` → 같은 네트워크의 아무나 root 명령 실행 가능.
+   - `WFSAT_HOST=0.0.0.0`으로 변경하고 실행 API를 켜면 네트워크에서 접속 가능한 사용자가 관리자 명령을 호출할 수 있다.
 
 2. **서버의 어떤 버그도 곧 root 취약점**
    - 인증·TLS 없는 커스텀 HTTP 핸들러. 파싱 버그·경로 처리 실수·정적 파일 디렉터리 탈출 등이 전부 root로 악용됨. 권한 분리의 "피해 한정" 효과 소멸.
@@ -123,7 +123,7 @@ kali ALL=(root) NOPASSWD: /usr/bin/bash, /usr/bin/python3, /usr/sbin/iw, /usr/sb
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `WFSAT_HOST` | `0.0.0.0` | 바인딩 주소. 로컬 실습은 `127.0.0.1` 권장 |
+| `WFSAT_HOST` | `127.0.0.1` | 브리지 수신 주소 |
 | `WFSAT_PORT` | `5000` | 포트 |
 | `WFSAT_ENABLE_EXEC` | `1` | `0`이면 명령 콘솔 비활성화 |
 | `WFSAT_SUDO` | `sudo -n` | root 명령 앞에 붙일 sudo. `""`이면 자동 sudo 끔 |

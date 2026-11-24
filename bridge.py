@@ -16,7 +16,7 @@
   WFSAT_LOG_DIR      기본 /tmp/et_logs          (et_config.conf 의 log_dir 과 맞출 것)
   WFSAT_DETECT_JSON  기본 <LOG_DIR>/detect.json (et_detector.py --json 저장 경로)
   WFSAT_STATIC_DIR   기본 <스크립트 폴더>/dashboard_html
-  WFSAT_HOST         기본 0.0.0.0
+  WFSAT_HOST         기본 127.0.0.1
   WFSAT_PORT         기본 5000
   WFSAT_ENABLE_EXEC  기본 1  (0 으로 두면 /api/exec 비활성화)
   WFSAT_EXEC_TIMEOUT 기본 60 (초, 포그라운드 명령의 최대 대기 시간)
@@ -24,9 +24,8 @@
 보안 주의:
   /api/exec 는 아래 ALLOWED_COMMANDS 화이트리스트에 등록된 명령만 실행한다.
   임의 셸 명령은 실행할 수 없으며, 셸 메타문자(; | & ` $ > < 등)는 거부된다.
-  다만 이 서버는 기본적으로 0.0.0.0 에 바인딩되므로, 같은 네트워크의 누구나
-  이 화이트리스트 명령을 호출할 수 있다. 격리된 실습 랜에서만 사용할 것.
-  더 잠그려면 WFSAT_HOST=127.0.0.1 로 실행하거나 WFSAT_ENABLE_EXEC=0 로 끈다.
+  기본 수신 주소는 127.0.0.1 이다. 다른 인터페이스에서 열람을 제공할 때는
+  WFSAT_ENABLE_EXEC=0 으로 실행 API를 끈다.
 
 실행:
   python3 bridge.py
@@ -65,7 +64,7 @@ else:
 LOG_DIR = os.environ.get("WFSAT_LOG_DIR", "/tmp/et_logs")
 DETECT_JSON = os.environ.get("WFSAT_DETECT_JSON", os.path.join(LOG_DIR, "detect.json"))
 STATIC_DIR = os.environ.get("WFSAT_STATIC_DIR", _DEFAULT_STATIC)
-HOST = os.environ.get("WFSAT_HOST", "0.0.0.0")
+HOST = os.environ.get("WFSAT_HOST", "127.0.0.1")
 PORT = int(os.environ.get("WFSAT_PORT", "5000"))
 
 # ---------------------------------------------------------------------------
