@@ -1,5 +1,7 @@
 # 명령 콘솔 보안 정리
 
+본인 기기에서 원격 열람할 때는 브리지를 일반 사용자로 실행하고 `WFSAT_ENABLE_EXEC=0`을 설정한다. 브리지 HTTP 포트는 루프백에 유지하고, 접속은 SSH 키 인증을 거친다. [SSH 원격 열람 가이드](remote-access.md)
+
 > 대시보드 명령 콘솔(`/api/exec`)을 root 권한으로 운영할 때의 보안 이슈와 완화 방법 정리.
 > 관련 코드: `bridge.py` (명령 실행), `dashboard_html/` (콘솔 UI)
 
