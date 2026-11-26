@@ -257,6 +257,17 @@
         </div>
       </section>
 
+      <article id="associationPanel" class="panel association-panel" aria-labelledby="associationHeading" hidden>
+        <h3 id="associationHeading">Evil Twin 연결 타임라인 예시</h3>
+        <p>학습용 예시입니다. 단계를 진행하면서 어느 AP가 사용자 기기의 연결 요청을 수락하는지 확인하세요.</p>
+        <div class="table-scroll" tabindex="0" aria-label="학습 시나리오의 연결 프레임">
+          <table class="live-detect-table">
+            <thead><tr><th scope="col">단계</th><th scope="col">프레임</th><th scope="col">방향</th><th scope="col">AP BSSID</th><th scope="col">결과</th></tr></thead>
+            <tbody id="associationFrames"></tbody>
+          </table>
+        </div>
+      </article>
+
       <section id="checkpointSection" class="panel checkpoint-panel" aria-labelledby="checkpointHeading">
         <div class="checkpoint-heading">
           <div>
@@ -316,11 +327,50 @@
 
         <div class="live-layout">
         <div class="live-main">
+        <section id="victimObservationPanel" class="panel victim-observation" aria-labelledby="victimObservationHeading" hidden>
+          <h3 id="victimObservationHeading">Evil Twin · 피해 기기 관찰 기록</h3>
+          <p>피해 기기의 Wi‑Fi 화면에서 직접 확인한 내용을 기록하세요. 확인할 수 없는 항목은 비워 두세요. 기록은 이 브라우저에 저장됩니다.</p>
+          <form id="victimObservationForm">
+            <fieldset>
+              <legend>실습 전 기준</legend>
+              <label>Wi‑Fi 이름 (SSID)<input name="baselineSsid" maxlength="64"></label>
+              <label>보안 유형
+                <select name="baselineSecurity">
+                  <option value="">확인 불가</option><option value="protected">보안 사용</option><option value="open">보안 없음</option>
+                </select>
+              </label>
+            </fieldset>
+            <fieldset>
+              <legend>실습 중 또는 재연결 후</legend>
+              <label>관찰 시각 (기기 현지 시간)<input name="observedAt" type="datetime-local"></label>
+              <label>Wi‑Fi 이름 (SSID)<input name="observedSsid" maxlength="64"></label>
+              <label>보안 유형
+                <select name="observedSecurity">
+                  <option value="">확인 불가</option><option value="protected">보안 사용</option><option value="open">보안 없음</option>
+                </select>
+              </label>
+              <label class="observation-check"><input name="disconnected" type="checkbox"> 연결 끊김을 봄</label>
+              <label class="observation-check"><input name="warning" type="checkbox"> Wi‑Fi 보안 경고를 봄</label>
+            </fieldset>
+            <fieldset>
+              <legend>내 판단</legend>
+              <label>판단
+                <select name="judgment">
+                  <option value="">선택</option><option value="review">의심</option><option value="undetermined">판단 보류</option><option value="unchanged">관찰한 범위에서 이상 없음</option>
+                </select>
+              </label>
+              <label>판단 근거<textarea name="notes" rows="3" maxlength="500"></textarea></label>
+            </fieldset>
+            <button type="submit">기록 저장</button>
+            <p id="victimObservationHint"></p>
+            <p id="victimObservationStatus" role="status"></p>
+          </form>
+        </section>
         <section class="panel live-status-panel" aria-labelledby="liveStatusHeading">
           <div class="panel-heading compact">
             <div>
               <p class="section-kicker">A · ATTACK STATUS</p>
-              <h3 id="liveStatusHeading">공격 상태</h3>
+              <h3 id="liveStatusHeading">실습 호스트의 공격 상태</h3>
             </div>
             <span id="liveStatusBadge" class="live-status-badge" data-state="idle">대기 중</span>
           </div>
@@ -342,7 +392,7 @@
             <div class="panel-heading compact">
               <div>
                 <p class="section-kicker">B · EVENT FEED</p>
-                <h3 id="liveEventsHeading">실시간 이벤트</h3>
+                <h3 id="liveEventsHeading">실습 호스트 이벤트</h3>
               </div>
               <span id="liveEventsCount" class="live-count">0건</span>
             </div>
@@ -378,29 +428,6 @@
                 <table class="live-detect-table">
                   <thead><tr><th scope="col">시각 (UTC)</th><th scope="col">SSID</th><th scope="col">송신 주소</th><th scope="col">BSSID</th><th scope="col">채널</th></tr></thead>
                   <tbody id="beaconFrames"></tbody>
-                </table>
-              </div>
-            </div>
-          </article>
-          <article id="associationPanel" class="panel association-panel" aria-labelledby="associationHeading" hidden>
-            <h3 id="associationHeading">Evil Twin 연결 타임라인</h3>
-            <p id="associationEmpty" class="live-empty">캡처에서 연결 또는 재연결 프레임을 찾지 못했습니다.</p>
-            <div id="associationTimeline" hidden>
-              <label for="associationClient">클라이언트</label>
-              <select id="associationClient"></select>
-              <p id="associationOmitted" class="live-empty" hidden></p>
-              <div class="table-scroll" tabindex="0" aria-label="선택한 클라이언트의 연결 프레임">
-                <table class="live-detect-table">
-                  <thead><tr><th scope="col">시각 (UTC)</th><th scope="col">프레임</th><th scope="col">AP BSSID</th><th scope="col">결과</th></tr></thead>
-                  <tbody id="associationFrames"></tbody>
-                </table>
-              </div>
-              <h4>같은 SSID를 쓰는 AP 비교</h4>
-              <p id="associationComparisonNote" aria-live="polite"></p>
-              <div id="associationComparison" class="table-scroll" tabindex="0" aria-label="같은 SSID를 쓰는 AP 비교" hidden>
-                <table class="live-detect-table">
-                  <thead><tr><th scope="col">BSSID</th><th scope="col">채널</th><th scope="col">암호화</th><th scope="col">탐지 판정</th></tr></thead>
-                  <tbody id="associationApRows"></tbody>
                 </table>
               </div>
             </div>

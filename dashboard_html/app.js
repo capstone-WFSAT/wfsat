@@ -827,7 +827,32 @@
     renderIdentityList(scenario, phase);
     renderGlossary(scenario);
     renderCheckpoint(scenario);
+    renderAssociationExample(scenario);
+    const observationPanel = $("victimObservationPanel");
+    if (observationPanel) observationPanel.hidden = scenario.id !== "evil-twin";
     updatePlaybackUi();
+  }
+
+  function renderAssociationExample(scenario) {
+    const panel = $("associationPanel");
+    if (!panel) return;
+    panel.hidden = !scenario.associationExample;
+    if (panel.hidden) return;
+
+    const bssids = scenario.signature.fields.find(({ key }) => key === "bssid");
+    $("associationFrames").innerHTML = scenario.associationExample
+      .filter(({ phase }) => phase <= state.phaseIndex)
+      .map(({ phase, ap, frame, response }) => {
+        const apLabel = ap === "real" ? "정상 AP" : "가짜 AP";
+        const direction = response ? `${apLabel} → 사용자 기기` : `사용자 기기 → ${apLabel}`;
+        return `<tr>
+          <td>${escapeHtml(scenario.phases[phase].label)}</td>
+          <td>${escapeHtml(frame)}</td>
+          <td>${escapeHtml(direction)}</td>
+          <td class="mono">${escapeHtml(bssids[ap])}</td>
+          <td>${response ? "수락 (0)" : "—"}</td>
+        </tr>`;
+      }).join("");
   }
 
   function setPhase(index, options = {}) {
@@ -943,6 +968,55 @@
   });
 
   render({ recordCompletion: false });
+
+  (function initVictimObservation() {
+    const form = $("victimObservationForm");
+    if (!form) return;
+    const storageKey = "wfsat.evilTwinObservation";
+    const hint = $("victimObservationHint");
+    const status = $("victimObservationStatus");
+
+    function updateHint() {
+      const data = new FormData(form);
+      const baseline = data.get("baselineSsid");
+      const observed = data.get("observedSsid");
+      let message = "같은 Wi‑Fi 이름을 사용하는지와 보안 유형이 바뀌었는지 비교해 보세요.";
+      if (baseline && baseline === observed && data.get("baselineSecurity") === "protected" && data.get("observedSecurity") === "open") {
+        message = "같은 Wi‑Fi 이름에서 보안 유형이 달라졌습니다. 관찰한 보안 유형과 시각을 의심 근거로 기록하세요.";
+      } else if (data.has("warning")) {
+        message = "보안 경고의 문구를 근거에 적고 평소 Wi‑Fi 설정과 비교하세요.";
+      } else if (data.has("disconnected")) {
+        message = "연결 끊김은 정상 환경에서도 발생할 수 있습니다. 재연결 후 Wi‑Fi 이름과 보안 유형도 확인하세요.";
+      }
+      hint.textContent = message;
+    }
+
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || "{}");
+      for (const field of form.elements) {
+        if (!field.name) continue;
+        if (field.type === "checkbox") field.checked = stored?.[field.name] === "on";
+        else if (typeof stored?.[field.name] === "string") field.value = stored[field.name];
+      }
+    } catch (error) {
+      status.textContent = "저장된 관찰 기록을 읽을 수 없습니다.";
+    }
+
+    updateHint();
+    form.addEventListener("input", () => {
+      status.textContent = "";
+      updateHint();
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(new FormData(form))));
+        status.textContent = "관찰 기록을 이 브라우저에 저장했습니다.";
+      } catch (error) {
+        status.textContent = "브라우저에 기록을 저장할 수 없습니다.";
+      }
+    });
+  })();
 
   /* =====================================================================
    * 실습(라이브) 모드 — bridge.py 의 /api/state 를 폴링해 실제 수집 데이터를 표시.
@@ -1173,85 +1247,6 @@
       selectBin(0);
     }
 
-    const associationPanel = $("associationPanel");
-    const associationEvents = {
-      association_request: "연결 요청",
-      association_response: "연결 응답",
-      reassociation_request: "재연결 요청",
-      reassociation_response: "재연결 응답"
-    };
-    let previousAssociationData = "";
-
-    function renderAssociationTimeline(detections) {
-      if (!associationPanel) return;
-      const timeline = detections?.association_timeline;
-      const frames = timeline?.frames;
-      associationPanel.hidden = !Array.isArray(frames);
-      if (associationPanel.hidden) {
-        previousAssociationData = "";
-        return;
-      }
-
-      const aps = detections.ap_table || [];
-      const signature = JSON.stringify([timeline, aps]);
-      if (signature === previousAssociationData) return;
-      previousAssociationData = signature;
-      $("associationEmpty").hidden = !!frames.length;
-      $("associationTimeline").hidden = !frames.length;
-      if (!frames.length) return;
-
-      const clientSelect = $("associationClient");
-      const frameRows = $("associationFrames");
-      const omitted = $("associationOmitted");
-      const selectedClient = clientSelect.value;
-      const clients = Array.from(new Set(frames.map(({ client }) => client))).sort();
-      clientSelect.replaceChildren(...clients.map((client) => new Option(client, client)));
-      clientSelect.value = clients.includes(selectedClient) ? selectedClient : frames[0].client;
-      omitted.hidden = !timeline.omitted;
-      omitted.textContent = `표시 범위를 초과한 연결 프레임 ${timeline.omitted}개`;
-
-      function compareAp(bssid) {
-        const ap = aps.find((row) => row.bssid === bssid);
-        const peers = ap?.ssid_raw_hex ? aps.filter((row) => row.ssid_raw_hex && row.ssid === ap.ssid) : [];
-        const table = $("associationComparison");
-        table.hidden = !peers.length;
-        $("associationComparisonNote").textContent = peers.length
-          ? `선택한 AP ${bssid} · SSID ${ap.ssid} · AP ${peers.length}개`
-          : `선택한 AP ${bssid}의 SSID를 캡처에서 확인할 수 없습니다.`;
-        for (const button of frameRows.querySelectorAll("button")) {
-          button.setAttribute("aria-pressed", String(button.textContent === bssid));
-        }
-        $("associationApRows").innerHTML = peers.map((row) => `<tr>
-          <td class="mono">${escapeHtml(row.bssid)}${row.bssid === bssid ? " (선택)" : ""}</td>
-          <td>${escapeHtml(row.channel ?? "—")}</td>
-          <td>${escapeHtml(row.enc ?? "—")}</td>
-          <td>${escapeHtml(row.status ?? "—")}</td>
-        </tr>`).join("");
-      }
-
-      function selectClient() {
-        const selected = frames.filter(({ client }) => client === clientSelect.value);
-        frameRows.innerHTML = selected.map((frame) => {
-          const result = frame.status == null ? "—" : frame.status === 0 ? "수락 (0)" : `미수락 (${frame.status})`;
-          return `<tr>
-            <td>${escapeHtml(new Date(frame.timestamp_ms).toISOString())}</td>
-            <td>${escapeHtml(associationEvents[frame.event])}</td>
-            <td class="mono"><button type="button" aria-pressed="false">${escapeHtml(frame.bssid)}</button></td>
-            <td>${escapeHtml(result)}</td>
-          </tr>`;
-        }).join("");
-        for (const [index, button] of Array.from(frameRows.querySelectorAll("button")).entries()) {
-          button.addEventListener("click", () => compareAp(selected[index].bssid));
-        }
-        const latestAccepted = selected.filter((frame) => frame.status === 0).pop();
-        compareAp((latestAccepted || selected[selected.length - 1]).bssid);
-      }
-
-      clientSelect.onchange = selectClient;
-      selectClient();
-    }
-
-    // 실제 상태로부터 토폴로지 장면을 구성한다.
     // 기본은 정상(클라이언트+진짜 AP)이며, Evil Twin 이 탐지되거나 공격이
     // 진행 중이면 학습 3단계처럼 공격자 노드와 공격 링크가 나타난다.
     function buildFlow(data) {
@@ -1347,7 +1342,6 @@
       renderEvents(data ? data.events : []);
       renderDetections(data ? data.detections : null);
       renderBeaconTimeline(data?.detections?.beacon_timeline);
-      renderAssociationTimeline(data?.detections);
       live.updated.textContent = new Date().toLocaleTimeString();
     }
 

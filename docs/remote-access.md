@@ -30,6 +30,6 @@ WFSAT_HOST=127.0.0.1 WFSAT_PORT=5000 WFSAT_REPORT_ONLY=1 WFSAT_ENABLE_EXEC=1 pyt
 
 탐지 결과에 Beacon 타임라인이 포함되어 있으면 같은 실습 탭의 **Beacon Flood 패킷 분석**에서 초별 프레임을 열람할 수 있다.
 
-클라이언트 MAC 주소가 포함된 Evil Twin 연결 타임라인은 로컬 실습용이다. 원격 조회 전용 모드의 응답에서는 제외된다.
+Evil Twin 학습 화면은 준비된 예시 데이터를 사용한다. 피해 기기 관찰 기록은 입력한 브라우저에 저장된다. PCAP에서 추출한 Evil Twin 연결 타임라인은 오프라인 분석 파일에서 확인할 수 있다.
 
 [OpenSSH 포트 포워딩 매뉴얼](https://man.openbsd.org/ssh#L) · [콘솔 보안 설정](security.md)

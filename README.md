@@ -211,12 +211,14 @@ pip install -r requirements.txt
 python3 detector/et_detector.py capture.pcap                                  # 리포트만
 python3 detector/et_detector.py capture.pcap --json /tmp/et_logs/detect.json  # + 대시보드 연동
 ```
-- `--json <경로>` — AP 목록, 탐지 항목, Beacon 및 연결 타임라인 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 같은 경로면 대시보드가 자동으로 읽는다.
+- `--json <경로>` — AP 목록, 탐지 항목, Beacon 및 연결 타임라인 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 같은 경로면 실습 탭에서 AP 목록과 탐지 항목, Beacon 타임라인을 읽는다. 연결 타임라인은 오프라인 분석용 JSON에 포함된다.
 - `--quiet` — 리포트 없이 JSON만.
 
 실습 탭의 **Beacon Flood 패킷 분석**에서 1초 단위 막대를 선택하면 시각(UTC), SSID, 송신 주소, BSSID, 채널을 볼 수 있다. 캡처 파일에서 처음 읽은 Beacon을 기준으로 최대 120초를 집계하고, 각 구간의 상세 표에는 처음 24개 프레임을 표시한다. 기존 JSON에 타임라인이 없으면 원본 PCAP을 다시 분석한다. [탐지 결과 형식](detector/detector.md)
 
-로컬 실습 탭의 **Evil Twin 연결 타임라인**에서 클라이언트별 연결·재연결 요청과 응답을 시간순으로 확인할 수 있다. 표에서 AP의 BSSID를 선택하면 같은 SSID로 묶인 AP들의 암호화 방식과 탐지 판정을 비교할 수 있다. 새 타임라인을 생성하려면 연결 관리 프레임이 포함된 PCAP을 `--json`으로 분석한다. [연결 타임라인 형식](detector/detector.md#연결-타임라인)
+Evil Twin을 선택한 뒤 **실습 → 피해 기기 관찰 기록**에서 평소 Wi‑Fi 상태, 실습 중 관찰한 변화, 판단 근거를 입력한다. 기록은 브라우저에 한 건 저장되며, 관찰 항목을 입력하면 비교할 단서가 표시된다.
+
+**학습 → Evil Twin 연결 타임라인 예시**에는 미리 준비한 연결 프레임이 시나리오 단계에 따라 표시된다. 사용자 기기의 연결 요청과 AP 응답을 따라가며 정상 AP에서 가짜 AP로 연결 대상이 바뀌는 과정을 볼 수 있다. 학습 탭은 브리지나 캡처 파일 없이 사용할 수 있다.
 
 **탐지 신호**
 - **S1** ESSID 내 zero-width 문자 (가중치 0.45) — Evil Twin

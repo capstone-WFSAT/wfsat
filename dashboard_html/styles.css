@@ -2929,15 +2929,35 @@ footer button {
 .live-detect-table td.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
 
 .beacon-panel, .association-panel { grid-column: 1 / -1; min-width: 0; }
-.association-panel select, .association-panel button {
+.victim-observation input:not([type="checkbox"]), .victim-observation select,
+.victim-observation textarea, .victim-observation button {
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
   background: var(--panel);
 }
-.association-panel button { cursor: pointer; }
-.association-panel button[aria-pressed="true"] { border-color: var(--cyan); }
+.victim-observation button { cursor: pointer; }
+.victim-observation form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.victim-observation fieldset {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.victim-observation label { display: grid; gap: 4px; }
+.victim-observation .observation-check {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+.victim-observation form > button { grid-column: 1 / -1; justify-self: start; }
+.victim-observation form > p { grid-column: 1 / -1; margin: 0; }
 .beacon-bars {
   display: flex;
   gap: 3px;
