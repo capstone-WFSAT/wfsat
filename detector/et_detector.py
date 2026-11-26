@@ -44,8 +44,12 @@ try:
         PcapReader,
         RadioTap,
         Dot11,
+        Dot11AssoReq,
+        Dot11AssoResp,
         Dot11Beacon,
         Dot11ProbeResp,
+        Dot11ReassoReq,
+        Dot11ReassoResp,
         Dot11Elt,
     )
 except ImportError:
@@ -237,9 +241,17 @@ def nibble_distance(mac_a: str, mac_b: str) -> int:
 
 BEACON_WINDOW_SECONDS = 120
 BEACON_FRAMES_PER_SECOND = 24
+ASSOCIATION_FRAME_LIMIT = 500
+ASSOCIATION_LAYERS = {
+    0: (Dot11AssoReq, "association_request"),
+    1: (Dot11AssoResp, "association_response"),
+    2: (Dot11ReassoReq, "reassociation_request"),
+    3: (Dot11ReassoResp, "reassociation_response"),
+}
 
 
-def parse_pcap(path: str, beacon_timeline: dict | None = None) -> dict:
+def parse_pcap(path: str, beacon_timeline: dict | None = None,
+               association_timeline: dict | None = None) -> dict:
     """pcap 을 스트리밍으로 읽어 BSSID 별 AccessPoint 를 구성."""
     aps: dict[str, AccessPoint] = {}
 
@@ -247,10 +259,13 @@ def parse_pcap(path: str, beacon_timeline: dict | None = None) -> dict:
         for pkt in reader:
             if not pkt.haslayer(Dot11):
                 continue
+            dot11 = pkt[Dot11]
+            if association_timeline is not None and dot11.type == 0 and dot11.subtype in ASSOCIATION_LAYERS:
+                record_association(association_timeline, pkt, dot11)
             if not (pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp)):
                 continue
 
-            bssid = pkt[Dot11].addr3
+            bssid = dot11.addr3
             if bssid is None:
                 continue
             bssid = bssid.lower()
@@ -310,6 +325,28 @@ def record_beacon(timeline, pkt, bssid, ssid_raw, channel):
             "bssid": bssid,
             "channel": channel,
         })
+
+
+def record_association(timeline, pkt, dot11):
+    layer_type, event = ASSOCIATION_LAYERS[dot11.subtype]
+    layer = pkt.getlayer(layer_type)
+    is_response = dot11.subtype in (1, 3)
+    client = dot11.addr1 if is_response else dot11.addr2
+    if layer is None or not client or not dot11.addr3:
+        return
+
+    frames = timeline["frames"]
+    if len(frames) >= ASSOCIATION_FRAME_LIMIT:
+        timeline["omitted"] += 1
+        return
+
+    frames.append({
+        "timestamp_ms": int(pkt.time * 1000),
+        "event": event,
+        "client": client.upper(),
+        "bssid": dot11.addr3.upper(),
+        "status": int(layer.status) if is_response else None,
+    })
 
 
 # ------------------------------------------------------------
@@ -536,7 +573,7 @@ def main() -> int:
     )
     parser.add_argument("pcap", help="path to pcap/pcapng file to analyze")
     parser.add_argument("--json", metavar="PATH",
-                        help="save AP, detection and Beacon timeline results as JSON")
+                        help="save AP, detection and frame timeline results as JSON")
     parser.add_argument("--quiet", action="store_true",
                         help="suppress stdout report (save JSON only)")
     args = parser.parse_args()
@@ -546,7 +583,10 @@ def main() -> int:
         return 1
 
     beacon_timeline = {"bins": [], "outside_window": 0} if args.json else None
-    aps = parse_pcap(args.pcap, beacon_timeline)
+    association_timeline = {"frames": [], "omitted": 0} if args.json else None
+    aps = parse_pcap(args.pcap, beacon_timeline, association_timeline)
+    if association_timeline is not None:
+        association_timeline["frames"].sort(key=lambda frame: frame["timestamp_ms"])
     apply_signals(aps)
     score_aps(aps)
     # beacon flood 는 score_aps 뒤에 판정(멤버 상태/점수를 덮어써야 하므로).
@@ -564,7 +604,8 @@ def main() -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as fh:
             json.dump(
-                {"ap_table": rows, "findings": findings, "beacon_timeline": beacon_timeline},
+                {"ap_table": rows, "findings": findings, "beacon_timeline": beacon_timeline,
+                 "association_timeline": association_timeline},
                 fh, ensure_ascii=False, indent=2,
             )
         if not args.quiet:

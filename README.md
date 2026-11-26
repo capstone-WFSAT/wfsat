@@ -211,10 +211,12 @@ pip install -r requirements.txt
 python3 detector/et_detector.py capture.pcap                                  # 리포트만
 python3 detector/et_detector.py capture.pcap --json /tmp/et_logs/detect.json  # + 대시보드 연동
 ```
-- `--json <경로>` — AP 목록, 탐지 항목, Beacon 타임라인 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 같은 경로면 대시보드가 자동으로 읽는다.
+- `--json <경로>` — AP 목록, 탐지 항목, Beacon 및 연결 타임라인 저장. 브리지의 `WFSAT_DETECT_JSON`(기본 `<log_dir>/detect.json`)과 같은 경로면 대시보드가 자동으로 읽는다.
 - `--quiet` — 리포트 없이 JSON만.
 
 실습 탭의 **Beacon Flood 패킷 분석**에서 1초 단위 막대를 선택하면 시각(UTC), SSID, 송신 주소, BSSID, 채널을 볼 수 있다. 캡처 파일에서 처음 읽은 Beacon을 기준으로 최대 120초를 집계하고, 각 구간의 상세 표에는 처음 24개 프레임을 표시한다. 기존 JSON에 타임라인이 없으면 원본 PCAP을 다시 분석한다. [탐지 결과 형식](detector/detector.md)
+
+로컬 실습 탭의 **Evil Twin 연결 타임라인**에서 클라이언트별 연결·재연결 요청과 응답을 시간순으로 확인할 수 있다. 표에서 AP의 BSSID를 선택하면 같은 SSID로 묶인 AP들의 암호화 방식과 탐지 판정을 비교할 수 있다. 새 타임라인을 생성하려면 연결 관리 프레임이 포함된 PCAP을 `--json`으로 분석한다. [연결 타임라인 형식](detector/detector.md#연결-타임라인)
 
 **탐지 신호**
 - **S1** ESSID 내 zero-width 문자 (가중치 0.45) — Evil Twin

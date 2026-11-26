@@ -1173,6 +1173,84 @@
       selectBin(0);
     }
 
+    const associationPanel = $("associationPanel");
+    const associationEvents = {
+      association_request: "연결 요청",
+      association_response: "연결 응답",
+      reassociation_request: "재연결 요청",
+      reassociation_response: "재연결 응답"
+    };
+    let previousAssociationData = "";
+
+    function renderAssociationTimeline(detections) {
+      if (!associationPanel) return;
+      const timeline = detections?.association_timeline;
+      const frames = timeline?.frames;
+      associationPanel.hidden = !Array.isArray(frames);
+      if (associationPanel.hidden) {
+        previousAssociationData = "";
+        return;
+      }
+
+      const aps = detections.ap_table || [];
+      const signature = JSON.stringify([timeline, aps]);
+      if (signature === previousAssociationData) return;
+      previousAssociationData = signature;
+      $("associationEmpty").hidden = !!frames.length;
+      $("associationTimeline").hidden = !frames.length;
+      if (!frames.length) return;
+
+      const clientSelect = $("associationClient");
+      const frameRows = $("associationFrames");
+      const omitted = $("associationOmitted");
+      const selectedClient = clientSelect.value;
+      const clients = Array.from(new Set(frames.map(({ client }) => client))).sort();
+      clientSelect.replaceChildren(...clients.map((client) => new Option(client, client)));
+      clientSelect.value = clients.includes(selectedClient) ? selectedClient : frames[0].client;
+      omitted.hidden = !timeline.omitted;
+      omitted.textContent = `표시 범위를 초과한 연결 프레임 ${timeline.omitted}개`;
+
+      function compareAp(bssid) {
+        const ap = aps.find((row) => row.bssid === bssid);
+        const peers = ap?.ssid_raw_hex ? aps.filter((row) => row.ssid_raw_hex && row.ssid === ap.ssid) : [];
+        const table = $("associationComparison");
+        table.hidden = !peers.length;
+        $("associationComparisonNote").textContent = peers.length
+          ? `선택한 AP ${bssid} · SSID ${ap.ssid} · AP ${peers.length}개`
+          : `선택한 AP ${bssid}의 SSID를 캡처에서 확인할 수 없습니다.`;
+        for (const button of frameRows.querySelectorAll("button")) {
+          button.setAttribute("aria-pressed", String(button.textContent === bssid));
+        }
+        $("associationApRows").innerHTML = peers.map((row) => `<tr>
+          <td class="mono">${escapeHtml(row.bssid)}${row.bssid === bssid ? " (선택)" : ""}</td>
+          <td>${escapeHtml(row.channel ?? "—")}</td>
+          <td>${escapeHtml(row.enc ?? "—")}</td>
+          <td>${escapeHtml(row.status ?? "—")}</td>
+        </tr>`).join("");
+      }
+
+      function selectClient() {
+        const selected = frames.filter(({ client }) => client === clientSelect.value);
+        frameRows.innerHTML = selected.map((frame) => {
+          const result = frame.status == null ? "—" : frame.status === 0 ? "수락 (0)" : `미수락 (${frame.status})`;
+          return `<tr>
+            <td>${escapeHtml(new Date(frame.timestamp_ms).toISOString())}</td>
+            <td>${escapeHtml(associationEvents[frame.event])}</td>
+            <td class="mono"><button type="button" aria-pressed="false">${escapeHtml(frame.bssid)}</button></td>
+            <td>${escapeHtml(result)}</td>
+          </tr>`;
+        }).join("");
+        for (const [index, button] of Array.from(frameRows.querySelectorAll("button")).entries()) {
+          button.addEventListener("click", () => compareAp(selected[index].bssid));
+        }
+        const latestAccepted = selected.filter((frame) => frame.status === 0).pop();
+        compareAp((latestAccepted || selected[selected.length - 1]).bssid);
+      }
+
+      clientSelect.onchange = selectClient;
+      selectClient();
+    }
+
     // 실제 상태로부터 토폴로지 장면을 구성한다.
     // 기본은 정상(클라이언트+진짜 AP)이며, Evil Twin 이 탐지되거나 공격이
     // 진행 중이면 학습 3단계처럼 공격자 노드와 공격 링크가 나타난다.
@@ -1269,6 +1347,7 @@
       renderEvents(data ? data.events : []);
       renderDetections(data ? data.detections : null);
       renderBeaconTimeline(data?.detections?.beacon_timeline);
+      renderAssociationTimeline(data?.detections);
       live.updated.textContent = new Date().toLocaleTimeString();
     }
 

@@ -393,11 +393,14 @@ def read_detections():
     data = _read_json_file(DETECT_JSON)
     if not isinstance(data, dict):
         return {"ap_table": [], "findings": []}
-    return {
+    result = {
         "ap_table": data.get("ap_table") or [],
         "findings": data.get("findings") or [],
         "beacon_timeline": data.get("beacon_timeline"),
     }
+    if not REPORT_ONLY and HOST == "127.0.0.1":
+        result["association_timeline"] = data.get("association_timeline")
+    return result
 
 
 def _events_from_logfile():

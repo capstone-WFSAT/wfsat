@@ -382,6 +382,29 @@
               </div>
             </div>
           </article>
+          <article id="associationPanel" class="panel association-panel" aria-labelledby="associationHeading" hidden>
+            <h3 id="associationHeading">Evil Twin 연결 타임라인</h3>
+            <p id="associationEmpty" class="live-empty">캡처에서 연결 또는 재연결 프레임을 찾지 못했습니다.</p>
+            <div id="associationTimeline" hidden>
+              <label for="associationClient">클라이언트</label>
+              <select id="associationClient"></select>
+              <p id="associationOmitted" class="live-empty" hidden></p>
+              <div class="table-scroll" tabindex="0" aria-label="선택한 클라이언트의 연결 프레임">
+                <table class="live-detect-table">
+                  <thead><tr><th scope="col">시각 (UTC)</th><th scope="col">프레임</th><th scope="col">AP BSSID</th><th scope="col">결과</th></tr></thead>
+                  <tbody id="associationFrames"></tbody>
+                </table>
+              </div>
+              <h4>같은 SSID를 쓰는 AP 비교</h4>
+              <p id="associationComparisonNote" aria-live="polite"></p>
+              <div id="associationComparison" class="table-scroll" tabindex="0" aria-label="같은 SSID를 쓰는 AP 비교" hidden>
+                <table class="live-detect-table">
+                  <thead><tr><th scope="col">BSSID</th><th scope="col">채널</th><th scope="col">암호화</th><th scope="col">탐지 판정</th></tr></thead>
+                  <tbody id="associationApRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </article>
         </section>
 
         <p class="live-updated">마지막 갱신 <span id="liveUpdated">—</span></p>

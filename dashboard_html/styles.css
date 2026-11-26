@@ -2928,7 +2928,16 @@ footer button {
 .live-detect-table th { color: var(--muted); font-size: 0.76rem; font-weight: 600; }
 .live-detect-table td.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
 
-.beacon-panel { grid-column: 1 / -1; min-width: 0; }
+.beacon-panel, .association-panel { grid-column: 1 / -1; min-width: 0; }
+.association-panel select, .association-panel button {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--panel);
+}
+.association-panel button { cursor: pointer; }
+.association-panel button[aria-pressed="true"] { border-color: var(--cyan); }
 .beacon-bars {
   display: flex;
   gap: 3px;
